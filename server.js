@@ -26,6 +26,40 @@ function sendLiveHealth(res) {
   });
 }
 
+/** Early CORS so /api/health works before full cors middleware (login status check). */
+function allowBrowserOrigin(req, res) {
+  const origin = String(req.headers.origin || '').replace(/\/+$/, '');
+  if (
+    !origin ||
+    origin === 'http://localhost:3000' ||
+    origin === 'http://localhost:3001' ||
+    origin === 'http://localhost:5000' ||
+    /^http:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
+    /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i.test(origin) ||
+    /^https:\/\/([a-z0-9-]+\.)*netlify\.app$/i.test(origin) ||
+    /^https:\/\/([a-z0-9-]+\.)*hostingersite\.com$/i.test(origin)
+  ) {
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+    }
+    return true;
+  }
+  return false;
+}
+
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    allowBrowserOrigin(req, res);
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    return res.sendStatus(204);
+  }
+  allowBrowserOrigin(req, res);
+  next();
+});
+
 app.get('/api/health', (_req, res) => sendLiveHealth(res));
 app.get('/health', (_req, res) => sendLiveHealth(res));
 app.get('/', (_req, res) => sendLiveHealth(res));
