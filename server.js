@@ -415,9 +415,10 @@ app.get('/api/health/db', async (_req, res) => {
       message: ok ? 'Database connected.' : 'Database unavailable.',
       data: {
         database: ok ? 'connected' : 'disconnected',
-        databaseError: dbHealth.error || null,
-        dbHost: dbHealth.host || '',
-        dbName: dbHealth.name || '',
+        databaseError: ok ? null : (dbHealth.error ? 'connection failed' : null),
+        // Do not expose host/name publicly (e.g. shared hosting IP)
+        dbHost: '',
+        dbName: '',
         dbKind: dbHealth.kind || ''
       }
     });
@@ -427,7 +428,9 @@ app.get('/api/health/db', async (_req, res) => {
       message: 'Database unavailable.',
       data: {
         database: 'disconnected',
-        databaseError: err.message || String(err)
+        databaseError: 'connection failed',
+        dbHost: '',
+        dbName: ''
       }
     });
   }
