@@ -2,7 +2,8 @@
  * Same operator submission must insert once.
  * Immediate POST + later Sync button reuse the same client_submission_id
  * (mobile local row id) and client_submitted_at (original tap time).
- * No 2-minute window — hours later sync still maps to the same row.
+ * Also blocks near-identical retries (same date + vehicle + operator)
+ * when submission id is missing (web / older clients).
  */
 
 function normalizeSubmittedAt(value) {
@@ -49,6 +50,36 @@ async function findRecentInwardDuplicate(db, fields) {
     );
     if (byTime[0]) return byTime[0];
   }
+  // Same-day retry without submission id (common on web / aborted POST retry)
+  if (fields.date && fields.vehicle) {
+    const client = String(fields.client || fields.client_name || '').trim();
+    const boxes = fields.boxes != null && fields.boxes !== ''
+      ? Number(fields.boxes)
+      : null;
+    const params = [
+      fields.date,
+      String(fields.vehicle).trim(),
+      fields.operator || ''
+    ];
+    let sql = `
+      SELECT inward_id AS id, reference_no
+      FROM inward_temp_logs
+      WHERE inward_entry_date = ?
+        AND TRIM(LOWER(inward_vehicle_no)) = TRIM(LOWER(?))
+        AND TRIM(LOWER(IFNULL(operator_email,''))) = TRIM(LOWER(IFNULL(?,'')))
+        AND inward_created_at >= (NOW() - INTERVAL 30 MINUTE)`;
+    if (client) {
+      sql += ` AND TRIM(LOWER(IFNULL(inward_client_name,''))) = TRIM(LOWER(?))`;
+      params.push(client);
+    }
+    if (Number.isFinite(boxes)) {
+      sql += ` AND inward_received_boxes_qty = ?`;
+      params.push(boxes);
+    }
+    sql += ` ORDER BY inward_id DESC LIMIT 1`;
+    const [byRecent] = await db.query(sql, params);
+    if (byRecent[0]) return byRecent[0];
+  }
   return null;
 }
 
@@ -76,6 +107,35 @@ async function findRecentOutwardDuplicate(db, fields) {
       [fields.date, String(fields.vehicle).trim(), fields.operator || '', submittedAt]
     );
     if (byTime[0]) return byTime[0];
+  }
+  if (fields.date && fields.vehicle) {
+    const client = String(fields.client || fields.client_name || '').trim();
+    const boxes = fields.boxes != null && fields.boxes !== ''
+      ? Number(fields.boxes)
+      : null;
+    const params = [
+      fields.date,
+      String(fields.vehicle).trim(),
+      fields.operator || ''
+    ];
+    let sql = `
+      SELECT outward_id AS id, reference_no
+      FROM outward_temp_logs
+      WHERE outward_entry_date = ?
+        AND TRIM(LOWER(outward_vehicle_no)) = TRIM(LOWER(?))
+        AND TRIM(LOWER(IFNULL(operator_email,''))) = TRIM(LOWER(IFNULL(?,'')))
+        AND outward_created_at >= (NOW() - INTERVAL 30 MINUTE)`;
+    if (client) {
+      sql += ` AND TRIM(LOWER(IFNULL(outward_client_name,''))) = TRIM(LOWER(?))`;
+      params.push(client);
+    }
+    if (Number.isFinite(boxes)) {
+      sql += ` AND outward_received_boxes_qty = ?`;
+      params.push(boxes);
+    }
+    sql += ` ORDER BY outward_id DESC LIMIT 1`;
+    const [byRecent] = await db.query(sql, params);
+    if (byRecent[0]) return byRecent[0];
   }
   return null;
 }

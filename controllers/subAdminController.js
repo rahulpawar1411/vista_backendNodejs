@@ -9,20 +9,13 @@ const bcrypt = require('bcryptjs');
 const { logActivity } = require('../utils/logger');
 const { handleControllerError } = require('../utils/errorHandler');
 const { sendSubAdminCredentialsEmail } = require('../utils/emailService');
+const {
+  loadScopeMaps,
+  resolveScopeTokens
+} = require('../utils/scopeResolve');
 
 async function queryCustomers(sql, params = []) {
   return db.query(sql, params);
-}
-
-function normalizeScopeCsv(value) {
-  if (value == null || value === '') return null;
-  const parts = Array.isArray(value)
-    ? value.map((v) => String(v || '').trim()).filter(Boolean)
-    : String(value)
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-  return parts.length ? parts.join(',') : null;
 }
 
 // 1. GET ALL CUSTOMERS
@@ -31,7 +24,22 @@ exports.getSubAdmins = async (req, res) => {
     const [rows] = await queryCustomers(
       'SELECT id, email, full_name, phone_no, allowed_clients, allowed_warehouses, created_at FROM customers ORDER BY id DESC'
     );
-    return res.json(rows);
+    const { clientMaps, warehouseMaps } = await loadScopeMaps();
+    const out = [];
+    for (const row of rows || []) {
+      const { clientsStr, warehousesStr } = await resolveScopeTokens({
+        clientsCsv: row.allowed_clients,
+        warehousesCsv: row.allowed_warehouses,
+        clientMaps,
+        warehouseMaps
+      });
+      out.push({
+        ...row,
+        allowed_clients: clientsStr,
+        allowed_warehouses: warehousesStr
+      });
+    }
+    return res.json(out);
   } catch (err) {
     return handleControllerError(res, err, {
       checkpoint: 'getSubAdmins',
@@ -72,9 +80,11 @@ exports.createSubAdmin = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashed = await bcrypt.hash(password, salt);
 
-    // Store allowed_clients and allowed_warehouses as comma-separated strings
-    const clientsStr = normalizeScopeCsv(allowed_clients);
-    const warehousesStr = normalizeScopeCsv(allowed_warehouses);
+    // Store allowed_clients and allowed_warehouses as comma-separated display names
+    const { clientsStr, warehousesStr } = await resolveScopeTokens({
+      clientsCsv: allowed_clients,
+      warehousesCsv: allowed_warehouses
+    });
 
     await queryCustomers(
       'INSERT INTO customers (email, password, full_name, phone_no, allowed_clients, allowed_warehouses) VALUES (?, ?, ?, ?, ?, ?)',
@@ -152,9 +162,11 @@ exports.updateSubAdmin = async (req, res) => {
       return res.status(400).json({ error: 'Email is already taken by another customer.' });
     }
 
-    // Store allowed_clients and allowed_warehouses as comma-separated strings
-    const clientsStr = normalizeScopeCsv(allowed_clients);
-    const warehousesStr = normalizeScopeCsv(allowed_warehouses);
+    // Store allowed_clients and allowed_warehouses as comma-separated display names
+    const { clientsStr, warehousesStr } = await resolveScopeTokens({
+      clientsCsv: allowed_clients,
+      warehousesCsv: allowed_warehouses
+    });
 
     if (password && password.trim() !== '') {
       // Hash new password

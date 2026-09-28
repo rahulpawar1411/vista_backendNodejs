@@ -545,9 +545,24 @@ exports.getMe = async (req, res) => {
       });
     }
 
+    const user = { ...req.user };
+    if (user.role === 'customer') {
+      try {
+        const { resolveScopeTokens } = require('../utils/scopeResolve');
+        const { clientsStr, warehousesStr } = await resolveScopeTokens({
+          clientsCsv: user.allowed_clients,
+          warehousesCsv: user.allowed_warehouses
+        });
+        user.allowed_clients = clientsStr;
+        user.allowed_warehouses = warehousesStr;
+      } catch (_) {
+        /* keep raw scope */
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      user: req.user
+      user
     });
   } catch (error) {
     return respondAuthServerError(res, error, {

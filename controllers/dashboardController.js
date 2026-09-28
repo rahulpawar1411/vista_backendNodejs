@@ -341,19 +341,44 @@ exports.getAccessScopeOptions = async (req, res) => {
       }
     }
 
+    const warehouseCodeToName = new Map(); // lower(code|name) -> display warehouse_name
     try {
       const [masterWh] = await db.query(
         `SELECT warehouse_code, warehouse_name FROM warehouse_master WHERE is_active = 1 ORDER BY warehouse_name ASC`
       );
       (masterWh || []).forEach((row) => {
-        if (row.warehouse_name) warehouseSet.add(String(row.warehouse_name).trim());
+        const name = row.warehouse_name != null ? String(row.warehouse_name).trim() : '';
+        const code = row.warehouse_code != null ? String(row.warehouse_code).trim() : '';
+        if (name) {
+          warehouseSet.add(name);
+          warehouseCodeToName.set(name.toLowerCase(), name);
+        }
+        if (code && name) {
+          warehouseCodeToName.set(code.toLowerCase(), name);
+        }
       });
       const [masterCl] = await db.query(
-        `SELECT client_code, client_name, warehouse_name FROM client_master WHERE is_active = 1 ORDER BY client_name ASC`
+        `SELECT cm.client_code, cm.client_name, cm.warehouse_name, wm.warehouse_code
+         FROM client_master cm
+         LEFT JOIN warehouse_master wm
+           ON LOWER(TRIM(wm.warehouse_name)) = LOWER(TRIM(COALESCE(cm.warehouse_name, '')))
+           OR LOWER(TRIM(wm.warehouse_code)) = LOWER(TRIM(COALESCE(cm.warehouse_name, '')))
+         WHERE cm.is_active = 1
+         ORDER BY cm.client_name ASC`
       );
       (masterCl || []).forEach((row) => {
-        if (row.client_name) clientSet.add(String(row.client_name).trim());
-        addWarehouseClient(row.warehouse_name, row.client_name);
+        const clientName = row.client_name != null ? String(row.client_name).trim() : '';
+        if (!clientName) return;
+        clientSet.add(clientName);
+        const rawWh = row.warehouse_name != null ? String(row.warehouse_name).trim() : '';
+        const resolvedWh =
+          (rawWh && warehouseCodeToName.get(rawWh.toLowerCase())) ||
+          rawWh ||
+          (row.warehouse_code ? warehouseCodeToName.get(String(row.warehouse_code).trim().toLowerCase()) : '') ||
+          '';
+        if (resolvedWh) addWarehouseClient(resolvedWh, clientName);
+        // Also index under code so UI matching by WH-CODE works
+        if (row.warehouse_code) addWarehouseClient(String(row.warehouse_code).trim(), clientName);
       });
     } catch (masterErr) {
       console.warn('Access scope master tables skipped:', masterErr.message);
@@ -390,6 +415,16 @@ exports.getAccessScopeOptions = async (req, res) => {
             unique.push(name);
           });
         warehouseClientMap[wh] = unique;
+        // Alias: if this key is a code, also expose under the master name (and vice versa)
+        const aliasName = warehouseCodeToName.get(String(wh).trim().toLowerCase());
+        if (aliasName && aliasName !== wh) {
+          if (!warehouseClientMap[aliasName]) warehouseClientMap[aliasName] = [];
+          unique.forEach((c) => {
+            if (!warehouseClientMap[aliasName].some((x) => String(x).toLowerCase() === c.toLowerCase())) {
+              warehouseClientMap[aliasName].push(c);
+            }
+          });
+        }
       });
 
     return res.json({
@@ -1179,7 +1214,11 @@ exports.getDoTaskOverview = async (req, res) => {
       }
     }
     if (!rangeDates.length) rangeDates.push(toYmd(now));
-    const todayStr = rangeDates[rangeDates.length - 1]; // end day (overdue anchor)
+    const calendarToday = toYmd(now);
+    // Never project expected tasks past calendar today
+    const seriesDates = rangeDates.filter((d) => d <= calendarToday);
+    if (!seriesDates.length) seriesDates.push(calendarToday);
+    const todayStr = seriesDates[seriesDates.length - 1];
     const useRange = rangeDates.length > 1;
     const baseDate = new Date(`${todayStr}T12:00:00`);
     const expectedShifts = ['Morning', 'Evening'];
@@ -1336,6 +1375,30 @@ exports.getDoTaskOverview = async (req, res) => {
       return !(byName || byId);
     };
 
+    const dailySeriesMap = new Map(
+      seriesDates.map((day) => [
+        day,
+        {
+          date: day,
+          morning_completed: 0,
+          morning_pending: 0,
+          morning_overdue: 0,
+          morning_expected: 0,
+          evening_completed: 0,
+          evening_pending: 0,
+          evening_overdue: 0,
+          evening_expected: 0,
+          completed: 0,
+          pending: 0,
+          overdue: 0,
+          inward: 0,
+          outward: 0
+        }
+      ])
+    );
+    // Prevent double-counting when one assignment matches multiple warehouse buckets
+    const seriesAssignmentSeen = new Set();
+
     const buckets = new Map();
 
     const ensureBucket = (warehouse, extra = {}) => {
@@ -1356,9 +1419,11 @@ exports.getDoTaskOverview = async (req, res) => {
           morning_expected: 0,
           morning_completed: 0,
           morning_pending: 0,
+          morning_overdue: 0,
           evening_expected: 0,
           evening_completed: 0,
-          evening_pending: 0
+          evening_pending: 0,
+          evening_overdue: 0
         });
       }
       const bucket = buckets.get(key);
@@ -1383,25 +1448,55 @@ exports.getDoTaskOverview = async (req, res) => {
         chamber_id: a.chamber_id != null ? a.chamber_id : null
       });
 
+      // Chart series: count each chamber+client once globally (not per matched warehouse)
+      const seriesKey = `${a.chamber_id != null ? `id:${a.chamber_id}` : `n:${num ?? ''}`}|${client.toLowerCase()}`;
+      const countForSeries = !seriesAssignmentSeen.has(seriesKey);
+      if (countForSeries) seriesAssignmentSeen.add(seriesKey);
+
       expectedShifts.forEach((shift) => {
         rangeDates.forEach((day) => {
+          // Skip future calendar days for expected/pending (bucket totals still use full requested range)
+          if (day > calendarToday) return;
+
           bucket.expected_today += 1;
           const prefix = shift === 'Evening' ? 'evening' : 'morning';
           bucket[`${prefix}_expected`] += 1;
+          const series = countForSeries ? dailySeriesMap.get(day) : null;
+          if (series) series[`${prefix}_expected`] += 1;
+
           if (assignmentIsDone(a, day, shift)) {
             bucket.completed += 1;
             bucket[`${prefix}_completed`] += 1;
+            if (series) {
+              series.completed += 1;
+              series[`${prefix}_completed`] += 1;
+            }
+          } else if (day < calendarToday) {
+            // Past day incomplete = overdue (not pending)
+            bucket.overdue += 1;
+            bucket[`${prefix}_overdue`] += 1;
+            if (series) {
+              series.overdue += 1;
+              series[`${prefix}_overdue`] += 1;
+            }
           } else {
+            // Calendar today incomplete = pending
             bucket.pending += 1;
             bucket[`${prefix}_pending`] += 1;
+            if (series) {
+              series.pending += 1;
+              series[`${prefix}_pending`] += 1;
+            }
           }
         });
       });
 
-      // Overdue stays single-day style (prior 5 days before range end)
+      // Single-day view: also count prior 5 days with no chamber log at all
       if (!useRange) {
         pastDates.forEach((date) => {
-          if (assignmentIsOverdue(a, date)) bucket.overdue += 1;
+          if (assignmentIsOverdue(a, date)) {
+            bucket.overdue += 1;
+          }
         });
       }
     };
@@ -1429,13 +1524,15 @@ exports.getDoTaskOverview = async (req, res) => {
         a.chamber_warehouse
       );
       let matched = false;
-      buckets.forEach((bucket) => {
-        if (aKeys.size === 0) return;
+      // First matching warehouse only — avoids double-counting pending/overdue/IO scope
+      for (const bucket of buckets.values()) {
+        if (aKeys.size === 0) break;
         if (setsOverlap(aKeys, bucket.warehouse_keys)) {
           addAssignmentToBucket(bucket, a);
           matched = true;
+          break;
         }
-      });
+      }
       if (!matched) {
         const fallback = a.assignment_warehouse || a.chamber_warehouse || a.assignment_warehouse_code || 'Unassigned';
         addAssignmentToBucket(
@@ -1495,9 +1592,11 @@ exports.getDoTaskOverview = async (req, res) => {
           morning_expected: w.morning_expected,
           morning_completed: w.morning_completed,
           morning_pending: w.morning_pending,
+          morning_overdue: w.morning_overdue,
           evening_expected: w.evening_expected,
           evening_completed: w.evening_completed,
           evening_pending: w.evening_pending,
+          evening_overdue: w.evening_overdue,
           assignment_count: w.assignment_count,
           submitted_today: submittedByEmail.get(emailKey) || 0,
           status: w.status,
@@ -1550,7 +1649,6 @@ exports.getDoTaskOverview = async (req, res) => {
       console.warn('DO task overview customers count skipped:', custCountErr.message);
     }
 
-    const calendarToday = toYmd(now);
     const ioByEmail = new Map();
     let totalInward = 0;
     let totalOutward = 0;
@@ -1572,8 +1670,8 @@ exports.getDoTaskOverview = async (req, res) => {
       const [inDayRows] = await db.query(
         `SELECT LOWER(TRIM(IFNULL(operator_email,''))) AS email, COUNT(*) AS c
          FROM inward_temp_logs
-         WHERE inward_entry_date >= ?
-           AND inward_entry_date <= ?
+         WHERE DATE(inward_entry_date) >= ?
+           AND DATE(inward_entry_date) <= ?
            AND TRIM(IFNULL(operator_email,'')) <> ''
          GROUP BY LOWER(TRIM(IFNULL(operator_email,'')))`,
         [fromStr, toStr]
@@ -1581,8 +1679,8 @@ exports.getDoTaskOverview = async (req, res) => {
       const [outDayRows] = await db.query(
         `SELECT LOWER(TRIM(IFNULL(operator_email,''))) AS email, COUNT(*) AS c
          FROM outward_temp_logs
-         WHERE outward_entry_date >= ?
-           AND outward_entry_date <= ?
+         WHERE DATE(outward_entry_date) >= ?
+           AND DATE(outward_entry_date) <= ?
            AND TRIM(IFNULL(operator_email,'')) <> ''
          GROUP BY LOWER(TRIM(IFNULL(operator_email,'')))`,
         [fromStr, toStr]
@@ -1592,13 +1690,41 @@ exports.getDoTaskOverview = async (req, res) => {
       const [[inAll]] = await db.query('SELECT COUNT(*) AS c FROM inward_temp_logs');
       const [[outAll]] = await db.query('SELECT COUNT(*) AS c FROM outward_temp_logs');
       const [[inDayAll]] = await db.query(
-        'SELECT COUNT(*) AS c FROM inward_temp_logs WHERE inward_entry_date >= ? AND inward_entry_date <= ?',
+        'SELECT COUNT(*) AS c FROM inward_temp_logs WHERE DATE(inward_entry_date) >= ? AND DATE(inward_entry_date) <= ?',
         [fromStr, toStr]
       );
       const [[outDayAll]] = await db.query(
-        'SELECT COUNT(*) AS c FROM outward_temp_logs WHERE outward_entry_date >= ? AND outward_entry_date <= ?',
+        'SELECT COUNT(*) AS c FROM outward_temp_logs WHERE DATE(outward_entry_date) >= ? AND DATE(outward_entry_date) <= ?',
         [fromStr, toStr]
       );
+      const [inByDayRows] = await db.query(
+        `SELECT DATE_FORMAT(inward_entry_date, '%Y-%m-%d') AS d, COUNT(*) AS c
+         FROM inward_temp_logs
+         WHERE DATE(inward_entry_date) >= ? AND DATE(inward_entry_date) <= ?
+         GROUP BY DATE_FORMAT(inward_entry_date, '%Y-%m-%d')`,
+        [fromStr, toStr]
+      );
+      const [outByDayRows] = await db.query(
+        `SELECT DATE_FORMAT(outward_entry_date, '%Y-%m-%d') AS d, COUNT(*) AS c
+         FROM outward_temp_logs
+         WHERE DATE(outward_entry_date) >= ? AND DATE(outward_entry_date) <= ?
+         GROUP BY DATE_FORMAT(outward_entry_date, '%Y-%m-%d')`,
+        [fromStr, toStr]
+      );
+      const dayKey = (raw) => {
+        if (raw == null) return '';
+        const s = String(raw);
+        const m = s.match(/(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : s.slice(0, 10);
+      };
+      (inByDayRows || []).forEach((row) => {
+        const series = dailySeriesMap.get(dayKey(row.d));
+        if (series) series.inward = Number(row.c) || 0;
+      });
+      (outByDayRows || []).forEach((row) => {
+        const series = dailySeriesMap.get(dayKey(row.d));
+        if (series) series.outward = Number(row.c) || 0;
+      });
       totalInward = Number(inAll?.c) || 0;
       totalOutward = Number(outAll?.c) || 0;
       todayInward = Number(inDayAll?.c) || 0;
@@ -1649,9 +1775,11 @@ exports.getDoTaskOverview = async (req, res) => {
         acc.overdue += w.overdue;
         acc.morning_completed += Number(w.morning_completed) || 0;
         acc.morning_pending += Number(w.morning_pending) || 0;
+        acc.morning_overdue += Number(w.morning_overdue) || 0;
         acc.morning_expected += Number(w.morning_expected) || 0;
         acc.evening_completed += Number(w.evening_completed) || 0;
         acc.evening_pending += Number(w.evening_pending) || 0;
+        acc.evening_overdue += Number(w.evening_overdue) || 0;
         acc.evening_expected += Number(w.evening_expected) || 0;
         return acc;
       },
@@ -1665,16 +1793,74 @@ exports.getDoTaskOverview = async (req, res) => {
         overdue: 0,
         morning_completed: 0,
         morning_pending: 0,
+        morning_overdue: 0,
         morning_expected: 0,
         evening_completed: 0,
         evening_pending: 0,
+        evening_overdue: 0,
         evening_expected: 0,
         total_inward: totalInward,
         total_outward: totalOutward,
         today_inward: todayInward,
-        today_outward: todayOutward
+        today_outward: todayOutward,
+        range_inward: todayInward,
+        range_outward: todayOutward
       }
     );
+
+    // Align summary pending/overdue with unique daily_series (no warehouse double-count)
+    const seriesTotals = (dailySeriesMap
+      ? Array.from(dailySeriesMap.values())
+      : []
+    ).reduce(
+      (acc, d) => {
+        acc.completed += Number(d.completed) || 0;
+        acc.pending += Number(d.pending) || 0;
+        acc.overdue += Number(d.overdue) || 0;
+        acc.morning_completed += Number(d.morning_completed) || 0;
+        acc.morning_pending += Number(d.morning_pending) || 0;
+        acc.morning_overdue += Number(d.morning_overdue) || 0;
+        acc.evening_completed += Number(d.evening_completed) || 0;
+        acc.evening_pending += Number(d.evening_pending) || 0;
+        acc.evening_overdue += Number(d.evening_overdue) || 0;
+        acc.inward += Number(d.inward) || 0;
+        acc.outward += Number(d.outward) || 0;
+        return acc;
+      },
+      {
+        completed: 0,
+        pending: 0,
+        overdue: 0,
+        morning_completed: 0,
+        morning_pending: 0,
+        morning_overdue: 0,
+        evening_completed: 0,
+        evening_pending: 0,
+        evening_overdue: 0,
+        inward: 0,
+        outward: 0
+      }
+    );
+    if (useRange) {
+      summary.completed = seriesTotals.completed;
+      summary.pending = seriesTotals.pending;
+      summary.overdue = seriesTotals.overdue;
+      summary.morning_completed = seriesTotals.morning_completed;
+      summary.morning_pending = seriesTotals.morning_pending;
+      summary.morning_overdue = seriesTotals.morning_overdue;
+      summary.evening_completed = seriesTotals.evening_completed;
+      summary.evening_pending = seriesTotals.evening_pending;
+      summary.evening_overdue = seriesTotals.evening_overdue;
+    }
+    // Prefer series day-sum for range IO when available
+    if (seriesTotals.inward > 0 || seriesTotals.outward > 0) {
+      summary.today_inward = seriesTotals.inward;
+      summary.today_outward = seriesTotals.outward;
+      summary.range_inward = seriesTotals.inward;
+      summary.range_outward = seriesTotals.outward;
+    }
+
+    const daily_series = seriesDates.map((day) => dailySeriesMap.get(day)).filter(Boolean);
 
     return res.status(200).json({
       success: true,
@@ -1684,6 +1870,7 @@ exports.getDoTaskOverview = async (req, res) => {
       range_days: rangeDates.length,
       expected_shifts: expectedShifts,
       summary,
+      daily_series,
       warehouses,
       operators: flatOperators,
       clients: flatClients

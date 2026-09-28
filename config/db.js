@@ -178,6 +178,8 @@ async function testDbConnection() {
           inward_entry_date DATE NOT NULL,
           inward_vehicle_no VARCHAR(100) NOT NULL,
           inward_seal_no VARCHAR(100) DEFAULT NULL,
+          inward_invoice_no VARCHAR(100) DEFAULT NULL,
+          inward_mens_power INT DEFAULT NULL,
           inward_vehicle_temp DECIMAL(5,2) DEFAULT NULL,
           inward_material_temp DECIMAL(5,2) DEFAULT NULL,
           inward_transporter_name VARCHAR(150) DEFAULT NULL,
@@ -240,6 +242,8 @@ async function testDbConnection() {
           outward_entry_date DATE NOT NULL,
           outward_vehicle_no VARCHAR(100) NOT NULL,
           outward_seal_no VARCHAR(100) DEFAULT NULL,
+          outward_invoice_no VARCHAR(100) DEFAULT NULL,
+          outward_mens_power INT DEFAULT NULL,
           outward_vehicle_temp DECIMAL(5,2) DEFAULT NULL,
           outward_pre_vehicle_temp DECIMAL(5,2) DEFAULT NULL,
           outward_material_temp DECIMAL(5,2) DEFAULT NULL,
@@ -696,6 +700,14 @@ async function testDbConnection() {
         await pool.query('ALTER TABLE outward_temp_logs ADD COLUMN outward_count_sheet_photo VARCHAR(255) DEFAULT NULL');
         console.log('🌱 Added column outward_count_sheet_photo to outward_temp_logs.');
       }
+      if (!colNames.includes('outward_invoice_no')) {
+        await pool.query('ALTER TABLE outward_temp_logs ADD COLUMN outward_invoice_no VARCHAR(100) DEFAULT NULL');
+        console.log('🌱 Added column outward_invoice_no to outward_temp_logs.');
+      }
+      if (!colNames.includes('outward_mens_power')) {
+        await pool.query('ALTER TABLE outward_temp_logs ADD COLUMN outward_mens_power INT DEFAULT NULL');
+        console.log('🌱 Added column outward_mens_power to outward_temp_logs.');
+      }
     } catch (tblErr) {
       console.warn('⚠️ Table outward_temp_logs columns verification failed:', tblErr.message);
     }
@@ -707,6 +719,14 @@ async function testDbConnection() {
       if (!colNames.includes('inward_count_sheet_photo')) {
         await pool.query('ALTER TABLE inward_temp_logs ADD COLUMN inward_count_sheet_photo VARCHAR(255) DEFAULT NULL');
         console.log('🌱 Added column inward_count_sheet_photo to inward_temp_logs.');
+      }
+      if (!colNames.includes('inward_invoice_no')) {
+        await pool.query('ALTER TABLE inward_temp_logs ADD COLUMN inward_invoice_no VARCHAR(100) DEFAULT NULL');
+        console.log('🌱 Added column inward_invoice_no to inward_temp_logs.');
+      }
+      if (!colNames.includes('inward_mens_power')) {
+        await pool.query('ALTER TABLE inward_temp_logs ADD COLUMN inward_mens_power INT DEFAULT NULL');
+        console.log('🌱 Added column inward_mens_power to inward_temp_logs.');
       }
     } catch (tblErr) {
       console.warn('⚠️ Table inward_temp_logs columns verification failed:', tblErr.message);

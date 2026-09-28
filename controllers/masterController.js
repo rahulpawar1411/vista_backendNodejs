@@ -13,6 +13,7 @@
 const db = require('../config/db');
 const { handleControllerError } = require('../utils/errorHandler');
 const { generateClientCode } = require('../utils/clientCodeGenerator');
+const { generateWarehouseCode } = require('../utils/warehouseCodeGenerator');
 
 /** Normalize WH-/CL- style codes; empty string if invalid. */
 function normalizeCode(value, prefix) {
@@ -55,28 +56,42 @@ exports.listWarehouses = async (req, res) => {
 /** POST /api/masters/warehouses — create warehouse_master row (WH- code). */
 exports.createWarehouse = async (req, res) => {
   try {
-    const warehouse_code = normalizeCode(req.body.warehouse_code, 'WH');
     const warehouse_name = String(req.body.warehouse_name || '').trim();
     const city = String(req.body.city || '').trim() || null;
-    if (!warehouse_code || !warehouse_name) {
+    if (!warehouse_name) {
+      return res.status(400).json({ success: false, message: 'Warehouse name is required.' });
+    }
+
+    let warehouse_code = normalizeCode(req.body.warehouse_code, 'WH');
+    if (!warehouse_code) {
+      const [existing] = await db.query('SELECT warehouse_code FROM warehouse_master');
+      warehouse_code = generateWarehouseCode(
+        warehouse_name,
+        null,
+        (existing || []).map((r) => r.warehouse_code)
+      );
+    }
+    if (!warehouse_code) {
       return res.status(400).json({ success: false, message: 'Warehouse code and name are required.' });
     }
+
     let finalCode = warehouse_code;
     const [dup] = await db.query(
       'SELECT warehouse_code FROM warehouse_master WHERE warehouse_code = ? LIMIT 1',
       [finalCode]
     );
     if (dup.length) {
-      for (let i = 2; i <= 99; i += 1) {
-        const suffix = String(i).padStart(2, '0');
-        const candidate = `${warehouse_code}-${suffix}`.slice(0, 48);
-        const [hit] = await db.query(
-          'SELECT warehouse_code FROM warehouse_master WHERE warehouse_code = ? LIMIT 1',
-          [candidate]
-        );
-        if (!hit.length) {
-          finalCode = candidate;
-          break;
+      const [existing] = await db.query('SELECT warehouse_code FROM warehouse_master');
+      const codes = (existing || []).map((r) => r.warehouse_code);
+      finalCode = generateWarehouseCode(warehouse_name, null, codes) || finalCode;
+      if (codes.map((c) => String(c).toUpperCase()).includes(String(finalCode).toUpperCase())) {
+        for (let i = 2; i <= 99; i += 1) {
+          const suffix = String(i).padStart(2, '0');
+          const candidate = `${warehouse_code}-${suffix}`.slice(0, 48);
+          if (!codes.map((c) => String(c).toUpperCase()).includes(candidate)) {
+            finalCode = candidate;
+            break;
+          }
         }
       }
     }

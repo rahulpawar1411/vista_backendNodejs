@@ -76,7 +76,8 @@ exports.getOutwardLogs = async (req, res) => {
     const total = countRows[0]?.total ?? 0;
 
     const query = `
-      SELECT outward_id, reference_no, DATE_FORMAT(outward_entry_date, '%Y-%m-%d') as outward_entry_date, outward_vehicle_no, outward_seal_no, 
+      SELECT outward_id, reference_no, DATE_FORMAT(outward_entry_date, '%Y-%m-%d') as outward_entry_date, outward_vehicle_no, outward_seal_no,
+             outward_invoice_no, outward_mens_power,
              outward_vehicle_temp, outward_pre_vehicle_temp, outward_material_temp, outward_transporter_name, outward_driver_name, outward_driver_no, 
              outward_client_name, outward_dock_no, outward_vehicle_reporting_time, outward_loading_start_time,
              outward_loading_duration_hours, outward_loading_duration_mins, outward_loading_end_time, 
@@ -166,6 +167,8 @@ exports.addOutwardLog = async (req, res) => {
       date: data.outward_entry_date,
       vehicle: data.outward_vehicle_no,
       operator: logOperatorEmail,
+      client: resolvedClientName || data.outward_client_name,
+      boxes: data.outward_received_boxes_qty,
       submissionId,
       submittedAt
     });
@@ -246,7 +249,8 @@ exports.addOutwardLog = async (req, res) => {
 
     const query = `
       INSERT INTO outward_temp_logs (
-        outward_entry_date, outward_vehicle_no, outward_seal_no, outward_vehicle_temp, outward_pre_vehicle_temp, outward_material_temp, outward_transporter_name, 
+        outward_entry_date, outward_vehicle_no, outward_seal_no, outward_invoice_no, outward_mens_power,
+        outward_vehicle_temp, outward_pre_vehicle_temp, outward_material_temp, outward_transporter_name, 
         outward_driver_name, outward_driver_no, outward_client_name, outward_dock_no, outward_vehicle_reporting_time, 
         outward_loading_start_time, outward_loading_duration_hours, outward_loading_duration_mins, outward_loading_end_time, outward_pallets_in_qty, outward_invoice_qty, 
         outward_received_qty, outward_received_boxes_qty, outward_short_received_boxes_qty, outward_excess_received_boxes_qty, 
@@ -255,13 +259,15 @@ exports.addOutwardLog = async (req, res) => {
         outward_material_temp_photo, outward_vehicle_back_side_photo, outward_vehicle_back_side_photo_with_material, outward_count_sheet_photo, outward_damage_boxes_photo,
         outward_created_at, outward_updated_at, warehouse_name, warehouse_code, outward_client_code, operator_email, photo_capture_metadata,
         client_submission_id, client_submitted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
       data.outward_entry_date,
       data.outward_vehicle_no,
       data.outward_seal_no || null,
+      data.outward_invoice_no || null,
+      data.outward_mens_power !== undefined && data.outward_mens_power !== '' ? parseInt(data.outward_mens_power, 10) : null,
       preTemp,
       preTemp,
       data.outward_material_temp !== undefined && data.outward_material_temp !== '' ? parseFloat(data.outward_material_temp) : null,
@@ -316,7 +322,9 @@ exports.addOutwardLog = async (req, res) => {
           submittedAt,
           date: data.outward_entry_date,
           vehicle: data.outward_vehicle_no,
-          operator: logOperatorEmail
+          operator: logOperatorEmail,
+          client: resolvedClientName || data.outward_client_name,
+          boxes: data.outward_received_boxes_qty
         });
         if (dup) {
           return res.status(200).json({
@@ -494,6 +502,8 @@ exports.updateOutwardLog = async (req, res) => {
         outward_entry_date = COALESCE(?, outward_entry_date),
         outward_vehicle_no = COALESCE(?, outward_vehicle_no),
         outward_seal_no = ?,
+        outward_invoice_no = ?,
+        outward_mens_power = ?,
         outward_vehicle_temp = ?,
         outward_pre_vehicle_temp = ?,
         outward_material_temp = ?,
@@ -584,6 +594,10 @@ exports.updateOutwardLog = async (req, res) => {
       outward_entry_date: data.outward_entry_date || current.outward_entry_date,
       outward_vehicle_no: data.outward_vehicle_no || current.outward_vehicle_no,
       outward_seal_no: data.outward_seal_no !== undefined ? data.outward_seal_no : current.outward_seal_no,
+      outward_invoice_no: data.outward_invoice_no !== undefined ? data.outward_invoice_no : current.outward_invoice_no,
+      outward_mens_power: data.outward_mens_power !== undefined && data.outward_mens_power !== ''
+        ? parseInt(data.outward_mens_power, 10)
+        : (data.outward_mens_power === '' ? null : current.outward_mens_power),
       outward_vehicle_temp: preTemp,
       outward_pre_vehicle_temp: preTemp,
       outward_material_temp: data.outward_material_temp !== undefined && data.outward_material_temp !== '' ? parseFloat(data.outward_material_temp) : current.outward_material_temp,
@@ -623,6 +637,8 @@ exports.updateOutwardLog = async (req, res) => {
       outward_entry_date: 'Entry Date',
       outward_vehicle_no: 'Vehicle No',
       outward_seal_no: 'Seal No',
+      outward_invoice_no: 'Invoice No',
+      outward_mens_power: 'Mens Power',
       outward_vehicle_temp: 'Vehicle Temp',
       outward_pre_vehicle_temp: 'Pre Vehicle Temp',
       outward_material_temp: 'Material Temp',
@@ -665,6 +681,10 @@ exports.updateOutwardLog = async (req, res) => {
       data.outward_entry_date,
       data.outward_vehicle_no,
       data.outward_seal_no !== undefined ? data.outward_seal_no : current.outward_seal_no,
+      data.outward_invoice_no !== undefined ? data.outward_invoice_no : current.outward_invoice_no,
+      data.outward_mens_power !== undefined && data.outward_mens_power !== ''
+        ? parseInt(data.outward_mens_power, 10)
+        : (data.outward_mens_power === '' ? null : current.outward_mens_power),
       preTemp,
       preTemp,
       data.outward_material_temp !== undefined && data.outward_material_temp !== '' ? parseFloat(data.outward_material_temp) : current.outward_material_temp,

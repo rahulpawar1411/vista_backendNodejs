@@ -8,6 +8,7 @@ const REQUIRED_FIELDS = [
   ['inward_dock_no', 'Dock No.'],
   ['inward_material_type', 'Material Type'],
   ['inward_vehicle_no', 'Vehicle No.'],
+  ['inward_invoice_no', 'Invoice No.'],
   ['inward_transporter_name', 'Transporter Name'],
   ['inward_driver_name', 'Driver Name'],
   ['inward_driver_no', 'Driver Phone No.'],

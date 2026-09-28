@@ -86,7 +86,8 @@ exports.getInwardLogs = async (req, res) => {
     const total = countRows[0]?.total ?? 0;
 
     const query = `
-      SELECT inward_id, reference_no, DATE_FORMAT(inward_entry_date, '%Y-%m-%d') as inward_entry_date, inward_vehicle_no, inward_seal_no, 
+      SELECT inward_id, reference_no, DATE_FORMAT(inward_entry_date, '%Y-%m-%d') as inward_entry_date, inward_vehicle_no, inward_seal_no,
+             inward_invoice_no, inward_mens_power,
              inward_vehicle_temp, inward_material_temp, inward_transporter_name, inward_driver_name, inward_driver_no, 
              inward_client_name, inward_dock_no, inward_vehicle_reporting_time, inward_unloading_start_time,
              inward_unloading_duration_hours, inward_unloading_duration_mins, inward_unloading_end_time, 
@@ -175,6 +176,8 @@ exports.addInwardLog = async (req, res) => {
       date: data.inward_entry_date,
       vehicle: data.inward_vehicle_no,
       operator: logOperatorEmail,
+      client: resolvedClientName || data.inward_client_name,
+      boxes: data.inward_received_boxes_qty,
       submissionId,
       submittedAt
     });
@@ -229,7 +232,8 @@ exports.addInwardLog = async (req, res) => {
 
     const query = `
       INSERT INTO inward_temp_logs (
-        inward_entry_date, inward_vehicle_no, inward_seal_no, inward_vehicle_temp, inward_material_temp, inward_transporter_name, 
+        inward_entry_date, inward_vehicle_no, inward_seal_no, inward_invoice_no, inward_mens_power,
+        inward_vehicle_temp, inward_material_temp, inward_transporter_name, 
         inward_driver_name, inward_driver_no, inward_client_name, inward_dock_no, inward_vehicle_reporting_time, 
         inward_unloading_start_time, inward_unloading_duration_hours, inward_unloading_duration_mins, inward_unloading_end_time, inward_pallets_in_qty, inward_invoice_qty, 
         inward_received_qty, inward_received_boxes_qty, inward_short_received_boxes_qty, inward_excess_received_boxes_qty, 
@@ -238,13 +242,15 @@ exports.addInwardLog = async (req, res) => {
         inward_material_temp_photo, inward_vehicle_back_side_photo, inward_vehicle_back_side_photo_with_material, inward_count_sheet_photo, inward_damage_boxes_photo,
         inward_created_at, inward_updated_at, warehouse_name, warehouse_code, inward_client_code, operator_email, photo_capture_metadata,
         client_submission_id, client_submitted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
       data.inward_entry_date,
       data.inward_vehicle_no,
       data.inward_seal_no || null,
+      data.inward_invoice_no || null,
+      data.inward_mens_power !== undefined && data.inward_mens_power !== '' ? parseInt(data.inward_mens_power, 10) : null,
       data.inward_vehicle_temp !== undefined && data.inward_vehicle_temp !== '' ? parseFloat(data.inward_vehicle_temp) : null,
       data.inward_material_temp !== undefined && data.inward_material_temp !== '' ? parseFloat(data.inward_material_temp) : null,
       data.inward_transporter_name || null,
@@ -292,7 +298,15 @@ exports.addInwardLog = async (req, res) => {
       [result] = await db.query(query, values);
     } catch (insertErr) {
       if (insertErr.code === 'ER_DUP_ENTRY' && submissionId) {
-        const dup = await findRecentInwardDuplicate(db, { submissionId, submittedAt, date: data.inward_entry_date, vehicle: data.inward_vehicle_no, operator: logOperatorEmail });
+        const dup = await findRecentInwardDuplicate(db, {
+          submissionId,
+          submittedAt,
+          date: data.inward_entry_date,
+          vehicle: data.inward_vehicle_no,
+          operator: logOperatorEmail,
+          client: resolvedClientName || data.inward_client_name,
+          boxes: data.inward_received_boxes_qty
+        });
         if (dup) {
           return res.status(200).json({
             success: true,
@@ -462,6 +476,8 @@ exports.updateInwardLog = async (req, res) => {
         inward_entry_date = COALESCE(?, inward_entry_date),
         inward_vehicle_no = COALESCE(?, inward_vehicle_no),
         inward_seal_no = ?,
+        inward_invoice_no = ?,
+        inward_mens_power = ?,
         inward_vehicle_temp = ?,
         inward_material_temp = ?,
         inward_transporter_name = ?,
@@ -546,6 +562,10 @@ exports.updateInwardLog = async (req, res) => {
       inward_entry_date: data.inward_entry_date || current.inward_entry_date,
       inward_vehicle_no: data.inward_vehicle_no || current.inward_vehicle_no,
       inward_seal_no: data.inward_seal_no !== undefined ? data.inward_seal_no : current.inward_seal_no,
+      inward_invoice_no: data.inward_invoice_no !== undefined ? data.inward_invoice_no : current.inward_invoice_no,
+      inward_mens_power: data.inward_mens_power !== undefined && data.inward_mens_power !== ''
+        ? parseInt(data.inward_mens_power, 10)
+        : (data.inward_mens_power === '' ? null : current.inward_mens_power),
       inward_vehicle_temp: data.inward_vehicle_temp !== undefined && data.inward_vehicle_temp !== '' ? parseFloat(data.inward_vehicle_temp) : current.inward_vehicle_temp,
       inward_material_temp: data.inward_material_temp !== undefined && data.inward_material_temp !== '' ? parseFloat(data.inward_material_temp) : current.inward_material_temp,
       inward_transporter_name: data.inward_transporter_name !== undefined ? data.inward_transporter_name : current.inward_transporter_name,
@@ -588,6 +608,8 @@ exports.updateInwardLog = async (req, res) => {
       inward_entry_date: 'Entry Date',
       inward_vehicle_no: 'Vehicle No',
       inward_seal_no: 'Seal No',
+      inward_invoice_no: 'Invoice No',
+      inward_mens_power: 'Mens Power',
       inward_vehicle_temp: 'Vehicle Temp',
       inward_material_temp: 'Material Temp',
       inward_transporter_name: 'Transporter Name',
@@ -628,6 +650,10 @@ exports.updateInwardLog = async (req, res) => {
       data.inward_entry_date,
       data.inward_vehicle_no,
       data.inward_seal_no !== undefined ? data.inward_seal_no : current.inward_seal_no,
+      data.inward_invoice_no !== undefined ? data.inward_invoice_no : current.inward_invoice_no,
+      data.inward_mens_power !== undefined && data.inward_mens_power !== ''
+        ? parseInt(data.inward_mens_power, 10)
+        : (data.inward_mens_power === '' ? null : current.inward_mens_power),
       data.inward_vehicle_temp !== undefined && data.inward_vehicle_temp !== '' ? parseFloat(data.inward_vehicle_temp) : current.inward_vehicle_temp,
       data.inward_material_temp !== undefined && data.inward_material_temp !== '' ? parseFloat(data.inward_material_temp) : current.inward_material_temp,
       data.inward_transporter_name !== undefined ? data.inward_transporter_name : current.inward_transporter_name,
