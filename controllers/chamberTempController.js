@@ -26,6 +26,7 @@ const {
 } = require('./permissionController');
 const { parseOptionalFloat } = require('../utils/photoCaptureMeta');
 const { resolveWarehouseFields, resolveClientFields } = require('../utils/masterResolver');
+const { stripCustomerEditAudit } = require('../utils/stripCustomerEditAudit');
 
 let memoryChamberLogs = [];
 
@@ -161,7 +162,7 @@ exports.getChamberLogs = async (req, res) => {
     const query = `SELECT id, reference_no, entry_date, client_name, client_code, chamber_name, inspection_time, box_temp, box_temp AS chamber_temp, box_count, overdue_time, monitor_supervisor_name, temp_sensor_image, photo_capture_time, photo_capture_latitude, photo_capture_longitude, photo_capture_accuracy, time_variance_minutes, update_details, update_count, DATE_FORMAT(entry_date, '%Y-%m-%d') as formatted_date, created_at, updated_at, warehouse_name, warehouse_code, operator_email, chamber_type, shift, chamber_id, is_native, remarks FROM daily_chamber_temp_logs ${whereClause} ORDER BY entry_date DESC, id DESC LIMIT ? OFFSET ?`;
 
     const [rows] = await db.query(query, [...params, limit, offset]);
-    return sendPaginated(res, rows, total, page, limit);
+    return sendPaginated(res, stripCustomerEditAudit(rows, req.user), total, page, limit);
   } catch (err) {
     // Soft-fail to in-memory fallback, but keep a structured checkpoint for Super Admin
     await logErrorCheckpoint(err, {
@@ -182,7 +183,13 @@ exports.getChamberLogs = async (req, res) => {
         (l.monitor_supervisor_name && l.monitor_supervisor_name.toLowerCase().includes(q))
       );
     }
-    return sendPaginated(res, filtered.slice(offset, offset + limit), filtered.length, page, limit);
+    return sendPaginated(
+      res,
+      stripCustomerEditAudit(filtered.slice(offset, offset + limit), req.user),
+      filtered.length,
+      page,
+      limit
+    );
   }
 };
 
@@ -355,9 +362,15 @@ exports.addChamberLog = async (req, res) => {
 // UPDATE temperature fields inline
 exports.updateChamberLog = async (req, res) => {
   const { id } = req.params;
-  const { chamber_name, inspection_time, box_temp, monitor_supervisor_name, entry_date, client_name, remarks } = req.body;
+  const { chamber_name, inspection_time, box_temp, monitor_supervisor_name, entry_date, client_name } = req.body;
+  let remarks = String(req.body.remarks || '').trim();
 
-  if (!remarks || !remarks.trim()) {
+  // Super Admin direct edit: allow missing remarks (same pattern as delete)
+  if (!remarks && req.user?.role === 'super_admin') {
+    remarks = 'Updated by Super Admin';
+  }
+
+  if (!remarks) {
     return res.status(400).json({
       success: false,
       message: 'Remarks are required to update this log.'

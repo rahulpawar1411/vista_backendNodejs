@@ -15,6 +15,7 @@ const { resolveLogAttribution } = require('../utils/logAttribution');
 const { parsePhotoCaptureMetadata, serializePhotoCaptureMetadata } = require('../utils/photoCaptureMeta');
 const { resolveWarehouseFields, resolveClientFields } = require('../utils/masterResolver');
 const { findRecentOutwardDuplicate, pickSubmission } = require('../utils/logDedup');
+const { stripCustomerEditAudit } = require('../utils/stripCustomerEditAudit');
 
 // Helper to format date
 function formatDateTime(date) {
@@ -93,7 +94,7 @@ exports.getOutwardLogs = async (req, res) => {
     `;
 
     const [rows] = await db.query(query, [...params, limit, offset]);
-    return sendPaginated(res, rows, total, page, limit);
+    return sendPaginated(res, stripCustomerEditAudit(rows, req.user), total, page, limit);
   } catch (err) {
     return handleControllerError(res, err, {
       checkpoint: 'getOutwardLogs',

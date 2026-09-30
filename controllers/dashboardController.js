@@ -458,11 +458,11 @@ exports.getInventoryFilterOptions = async (req, res) => {
     };
 
     const pairQueries = [
+      // Keep inactive/deactivated chamber clients — history & filters must still list them
       `SELECT DISTINCT warehouse_name, client_name
        FROM chamber_client_assignments
        WHERE warehouse_name IS NOT NULL AND TRIM(warehouse_name) != ''
-         AND client_name IS NOT NULL AND TRIM(client_name) != ''
-         AND (status IS NULL OR status = 'active')`,
+         AND client_name IS NOT NULL AND TRIM(client_name) != ''`,
       `SELECT DISTINCT warehouse_name, client_name
        FROM daily_chamber_temp_logs
        WHERE warehouse_name IS NOT NULL AND TRIM(warehouse_name) != ''
@@ -484,6 +484,29 @@ exports.getInventoryFilterOptions = async (req, res) => {
       } catch (tableErr) {
         console.warn('Inventory filter pair query skipped:', tableErr.message);
       }
+    }
+
+    // Client master (active + inactive/deactivated) — keep Client (by Warehouse) complete
+    try {
+      const [masterCl] = await db.query(
+        `SELECT cm.client_name, cm.warehouse_name, cm.is_active, wm.warehouse_name AS resolved_warehouse_name
+         FROM client_master cm
+         LEFT JOIN warehouse_master wm
+           ON LOWER(TRIM(wm.warehouse_name)) = LOWER(TRIM(COALESCE(cm.warehouse_name, '')))
+           OR LOWER(TRIM(wm.warehouse_code)) = LOWER(TRIM(COALESCE(cm.warehouse_name, '')))
+         WHERE cm.client_name IS NOT NULL AND TRIM(cm.client_name) != ''`
+      );
+      (masterCl || []).forEach((row) => {
+        const clientName = row.client_name != null ? String(row.client_name).trim() : '';
+        if (!clientName) return;
+        const wh =
+          (row.resolved_warehouse_name && String(row.resolved_warehouse_name).trim()) ||
+          (row.warehouse_name && String(row.warehouse_name).trim()) ||
+          '';
+        if (wh) addPair(wh, clientName);
+      });
+    } catch (masterErr) {
+      console.warn('Inventory filter client_master query skipped:', masterErr.message);
     }
 
     // Warehouses configured on DO operators (even if no client rows yet)
@@ -602,15 +625,45 @@ exports.getInventoryReconciliation = async (req, res) => {
          AND cca.chamber_id = COALESCE(d1.chamber_id, ch.id, chn.id)
       ) d
       LEFT JOIN (
-        SELECT inward_client_name, warehouse_name, SUM(inward_received_boxes_qty) AS total_inward
+        SELECT
+          LOWER(TRIM(inward_client_name)) AS client_key,
+          LOWER(TRIM(IFNULL(warehouse_name, ''))) AS wh_key,
+          SUM(
+            GREATEST(
+              0,
+              COALESCE(
+                NULLIF(inward_received_boxes_qty, 0),
+                NULLIF(inward_received_qty, 0),
+                0
+              )
+            )
+          ) AS total_inward
         FROM inward_temp_logs
-        GROUP BY inward_client_name, warehouse_name
-      ) i ON d.client_name = i.inward_client_name AND (d.warehouse_name = i.warehouse_name OR (d.warehouse_name IS NULL AND i.warehouse_name IS NULL))
+        WHERE inward_client_name IS NOT NULL AND TRIM(inward_client_name) != ''
+        GROUP BY LOWER(TRIM(inward_client_name)), LOWER(TRIM(IFNULL(warehouse_name, '')))
+      ) i
+        ON LOWER(TRIM(d.client_name)) = i.client_key
+       AND LOWER(TRIM(IFNULL(d.warehouse_name, ''))) = i.wh_key
       LEFT JOIN (
-        SELECT outward_client_name, warehouse_name, SUM(outward_received_boxes_qty) AS total_outward
+        SELECT
+          LOWER(TRIM(outward_client_name)) AS client_key,
+          LOWER(TRIM(IFNULL(warehouse_name, ''))) AS wh_key,
+          SUM(
+            GREATEST(
+              0,
+              COALESCE(
+                NULLIF(outward_received_boxes_qty, 0),
+                NULLIF(outward_received_qty, 0),
+                0
+              )
+            )
+          ) AS total_outward
         FROM outward_temp_logs
-        GROUP BY outward_client_name, warehouse_name
-      ) o ON d.client_name = o.outward_client_name AND (d.warehouse_name = o.warehouse_name OR (d.warehouse_name IS NULL AND o.warehouse_name IS NULL))
+        WHERE outward_client_name IS NOT NULL AND TRIM(outward_client_name) != ''
+        GROUP BY LOWER(TRIM(outward_client_name)), LOWER(TRIM(IFNULL(warehouse_name, '')))
+      ) o
+        ON LOWER(TRIM(d.client_name)) = o.client_key
+       AND LOWER(TRIM(IFNULL(d.warehouse_name, ''))) = o.wh_key
     `;
 
     const [rows] = await db.query(sql);
@@ -1006,7 +1059,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
     let inwardSql = `
       SELECT
         DATE_FORMAT(inward_entry_date, '%Y-%m-%d') AS entry_date,
-        SUM(GREATEST(0, IFNULL(inward_received_boxes_qty, 0))) AS boxes
+        SUM(GREATEST(0, COALESCE(inward_received_boxes_qty, inward_received_qty, 0))) AS boxes
       FROM inward_temp_logs
       WHERE LOWER(TRIM(inward_client_name)) = LOWER(TRIM(?))
         AND inward_entry_date >= ?
@@ -1014,8 +1067,11 @@ exports.getClientMonthBoxSheet = async (req, res) => {
     `;
     const inwardParams = [clientName, fromDate, toDate];
     if (warehouseName) {
-      inwardSql += ` AND LOWER(TRIM(IFNULL(warehouse_name,''))) = LOWER(TRIM(?)) `;
-      inwardParams.push(warehouseName);
+      inwardSql += ` AND (
+        LOWER(TRIM(IFNULL(warehouse_name,''))) = LOWER(TRIM(?))
+        OR LOWER(TRIM(IFNULL(warehouse_code,''))) = LOWER(TRIM(?))
+      ) `;
+      inwardParams.push(warehouseName, warehouseName);
     }
     inwardSql += ` GROUP BY DATE_FORMAT(inward_entry_date, '%Y-%m-%d') `;
     const [inwardRows] = await db.query(inwardSql, inwardParams);
@@ -1024,7 +1080,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
     let outwardSql = `
       SELECT
         DATE_FORMAT(outward_entry_date, '%Y-%m-%d') AS entry_date,
-        SUM(GREATEST(0, IFNULL(outward_received_boxes_qty, 0))) AS boxes
+        SUM(GREATEST(0, COALESCE(outward_received_boxes_qty, outward_received_qty, 0))) AS boxes
       FROM outward_temp_logs
       WHERE LOWER(TRIM(outward_client_name)) = LOWER(TRIM(?))
         AND outward_entry_date >= ?
@@ -1032,8 +1088,11 @@ exports.getClientMonthBoxSheet = async (req, res) => {
     `;
     const outwardParams = [clientName, fromDate, toDate];
     if (warehouseName) {
-      outwardSql += ` AND LOWER(TRIM(IFNULL(warehouse_name,''))) = LOWER(TRIM(?)) `;
-      outwardParams.push(warehouseName);
+      outwardSql += ` AND (
+        LOWER(TRIM(IFNULL(warehouse_name,''))) = LOWER(TRIM(?))
+        OR LOWER(TRIM(IFNULL(warehouse_code,''))) = LOWER(TRIM(?))
+      ) `;
+      outwardParams.push(warehouseName, warehouseName);
     }
     outwardSql += ` GROUP BY DATE_FORMAT(outward_entry_date, '%Y-%m-%d') `;
     const [outwardRows] = await db.query(outwardSql, outwardParams);
@@ -1117,16 +1176,96 @@ exports.getClientMonthBoxSheet = async (req, res) => {
       day.outward_boxes = Math.max(0, Number(row.boxes) || 0);
     });
 
-    // Closing total = evening if present, else morning
-    Object.values(byDate).forEach((day) => {
-      if (day.evening_qty != null) day.total_boxes = day.evening_qty;
-      else if (day.morning_qty != null) day.total_boxes = day.morning_qty;
-      else day.total_boxes = null;
-    });
+    // Opening before range = lifetime In − Out only (no daily-task / chamber counts)
+    let openingLeft = 0;
+    try {
+      let openInSql = `
+        SELECT COALESCE(SUM(
+          GREATEST(0, COALESCE(inward_received_boxes_qty, inward_received_qty, 0))
+        ), 0) AS boxes
+        FROM inward_temp_logs
+        WHERE LOWER(TRIM(inward_client_name)) = LOWER(TRIM(?))
+          AND inward_entry_date < ?
+      `;
+      const openInParams = [clientName, fromDate];
+      if (warehouseName) {
+        openInSql += ` AND (
+          LOWER(TRIM(IFNULL(warehouse_name,''))) = LOWER(TRIM(?))
+          OR LOWER(TRIM(IFNULL(warehouse_code,''))) = LOWER(TRIM(?))
+        ) `;
+        openInParams.push(warehouseName, warehouseName);
+      }
+      let openOutSql = `
+        SELECT COALESCE(SUM(
+          GREATEST(0, COALESCE(outward_received_boxes_qty, outward_received_qty, 0))
+        ), 0) AS boxes
+        FROM outward_temp_logs
+        WHERE LOWER(TRIM(outward_client_name)) = LOWER(TRIM(?))
+          AND outward_entry_date < ?
+      `;
+      const openOutParams = [clientName, fromDate];
+      if (warehouseName) {
+        openOutSql += ` AND (
+          LOWER(TRIM(IFNULL(warehouse_name,''))) = LOWER(TRIM(?))
+          OR LOWER(TRIM(IFNULL(warehouse_code,''))) = LOWER(TRIM(?))
+        ) `;
+        openOutParams.push(warehouseName, warehouseName);
+      }
+      const [[openIn]] = await db.query(openInSql, openInParams);
+      const [[openOut]] = await db.query(openOutSql, openOutParams);
+      openingLeft = Math.max(
+        0,
+        (Number(openIn?.boxes) || 0) - (Number(openOut?.boxes) || 0)
+      );
+    } catch (openErr) {
+      console.warn('Client month opening balance skipped:', openErr.message);
+    }
 
-    const days = Object.keys(byDate)
+    /**
+     * In/Out records only (no daily-task morning/evening totals):
+     *   Start = previous day Left
+     *   Left  = Start + Inward − Outward
+     */
+    let runningLeft = openingLeft;
+    Object.keys(byDate)
+      .sort((a, b) => a.localeCompare(b))
+      .forEach((ymd) => {
+        const day = byDate[ymd];
+        const inn = Math.max(0, Number(day.inward_boxes) || 0);
+        const out = Math.max(0, Number(day.outward_boxes) || 0);
+        const startLeft = runningLeft;
+        const endLeft = Math.max(0, startLeft + inn - out);
+        day.start_left = startLeft;
+        day.left_boxes = endLeft;
+        day.total_boxes = endLeft;
+        day.has_movement = inn > 0 || out > 0;
+        if (day.evening_qty != null) day.audit_qty = day.evening_qty;
+        else if (day.morning_qty != null) day.audit_qty = day.morning_qty;
+        else day.audit_qty = null;
+        runningLeft = endLeft;
+      });
+
+    const allDays = Object.keys(byDate)
       .sort((a, b) => a.localeCompare(b))
       .map((k) => byDate[k]);
+
+    // Only In/Out movement days — Start = previous visible Left
+    const activityDays = allDays.filter((d) => d.has_movement);
+    const days = activityDays.length ? activityDays : allDays;
+    for (let i = 0; i < days.length; i += 1) {
+      const d = days[i];
+      const inn = Math.max(0, Number(d.inward_boxes) || 0);
+      const out = Math.max(0, Number(d.outward_boxes) || 0);
+      if (i === 0) {
+        d.start_left = Math.max(0, Number(d.start_left) || 0);
+        d.has_previous = openingLeft > 0 || d.start_left > 0;
+      } else {
+        d.start_left = Math.max(0, Number(days[i - 1].left_boxes) || 0);
+        d.has_previous = true;
+      }
+      d.left_boxes = Math.max(0, d.start_left + inn - out);
+      d.total_boxes = d.left_boxes;
+    }
 
     const resolvedChamber =
       chamberName && chamberName !== '-'
@@ -1143,7 +1282,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
       },
       { inward: 0, outward: 0 }
     );
-    const lastWithTotal = [...days].reverse().find((d) => d.total_boxes != null);
+    const lastDay = days.length ? days[days.length - 1] : null;
 
     return res.status(200).json({
       success: true,
@@ -1158,7 +1297,8 @@ exports.getClientMonthBoxSheet = async (req, res) => {
         day_count: days.length,
         month_inward_total: totals.inward,
         month_outward_total: totals.outward,
-        closing_total: lastWithTotal ? lastWithTotal.total_boxes : null
+        opening_left: openingLeft,
+        closing_total: lastDay != null ? lastDay.left_boxes : openingLeft
       },
       days
     });
