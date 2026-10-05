@@ -1,6 +1,10 @@
 // ====================================================================
-// Customer Routes (backend/routes/subAdminRoutes.js)
-// Defines API endpoints for Super Admin to CRUD Customer accounts.
+// Customer portal accounts — mounted at /api/customers
+// --------------------------------------------------------------------
+// GET    /       — list scoped customers (allowed clients/warehouses)
+// POST   /       — create customer login
+// PUT    /:id    — update customer + scope
+// DELETE /:id    — delete customer
 // ====================================================================
 
 const express = require('express');

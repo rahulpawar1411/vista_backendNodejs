@@ -1,6 +1,10 @@
 // ====================================================================
-// Daily Chamber Temp Log Routes (backend/routes/chamberTempRoutes.js)
-// Multer Upload Configuration for temp_sensor_image
+// Chamber temp logs — mounted at /api/chamber-temp
+// --------------------------------------------------------------------
+// GET    /       — list daily chamber box temperature logs
+// POST   /       — create log + sensor photo upload
+// PUT    /:id    — update log
+// DELETE /:id    — delete log
 // ====================================================================
 
 const express = require('express');

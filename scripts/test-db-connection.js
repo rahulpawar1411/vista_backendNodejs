@@ -1,3 +1,9 @@
+// ====================================================================
+// DB connection smoke test (scripts/test-db-connection.js)
+// Prints success or the exact MySQL error from .env credentials.
+// Run: node scripts/test-db-connection.js
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 

@@ -1,3 +1,9 @@
+// ====================================================================
+// Outward duplicate finder (scripts/fetch-outward-duplicates.js)
+// Lists outward rows that share the same vehicle/date (data cleanup aid).
+// Run: node scripts/fetch-outward-duplicates.js
+// ====================================================================
+
 require('dotenv').config();
 const mysql = require('mysql2/promise');
 

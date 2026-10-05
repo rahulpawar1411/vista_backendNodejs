@@ -1,3 +1,18 @@
+// ====================================================================
+// Chambers — mounted at /api/chambers
+// --------------------------------------------------------------------
+// GET    /                    — list chambers
+// POST   /                    — create chamber
+// PUT    /:id                 — update chamber
+// DELETE /:id                 — delete chamber
+// GET    /assignments         — chamber ↔ client assignments
+// POST   /assignments         — add assignment
+// DELETE /assignments         — remove assignment
+// GET    /inspections         — list daily inspections
+// POST   /inspections         — add inspection (+ photo)
+// DELETE /inspections/:id     — delete inspection
+// ====================================================================
+
 const express = require('express');
 const router = express.Router();
 const { createUploader } = require('../config/multer');

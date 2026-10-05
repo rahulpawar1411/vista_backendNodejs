@@ -9,6 +9,7 @@ const { backfillMasterData } = require('../utils/masterBackfill');
 
 dotenv.config();
 
+/** True when this process runs on Railway cloud (not on a developer laptop). */
 function isRunningOnRailway() {
   return Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME);
 }
@@ -26,6 +27,7 @@ function usableDatabaseUrl() {
   return url;
 }
 
+/** Logs-friendly host/port/db name — used in startup messages and /api/health/db. */
 function describeDbTarget() {
   const url = usableDatabaseUrl();
   if (url) {
@@ -89,6 +91,7 @@ console.log(
     `${isFreeSqlHost ? ' (FreeSQL safe)' : ''}`
 );
 
+/** Creates the shared mysql2 pool from DATABASE_URL or DB_HOST settings in .env. */
 function createMysqlPool() {
   const databaseUrl = usableDatabaseUrl();
   try {
@@ -116,13 +119,17 @@ pool.on('connection', (connection) => {
   connection.query("SET time_zone = '+05:30'", () => {});
 });
 
-// Helper function to test DB connection when backend starts
+/**
+ * Runs once at startup: ping MySQL, create missing tables, and apply safe ALTER migrations.
+ * WHY: New deploys and old databases stay in sync without manual SQL scripts.
+ */
 async function testDbConnection() {
   try {
     // Use pool.query only (no held getConnection) so FreeSQL connection slots stay free
     await pool.query('SELECT 1');
     console.log('✅ Connected to MySQL Database:', dbTarget.name, `(${dbTarget.kind})`);
 
+    // --- Bootstrap core tables (auth + logs) ---
     // Fresh DB bootstrap: core auth + inward/outward log tables (must exist before ALTER migrations)
     try {
       await pool.query(`

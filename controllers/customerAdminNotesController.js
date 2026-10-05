@@ -9,6 +9,7 @@ const db = require('../config/db');
 const { logActivity } = require('../utils/logger');
 const { handleControllerError } = require('../utils/errorHandler');
 
+/** Finds customer id and display name for note threads (customers table first). */
 async function loadCustomerIdentity(email) {
   const clean = String(email || '').trim().toLowerCase();
   if (!clean) return null;
@@ -32,7 +33,10 @@ async function loadCustomerIdentity(email) {
   }
 }
 
-/** GET / — list notes (customer: own; super_admin: all or by customer_email) */
+/**
+ * Chat-style messages for one customer (or all threads for Super Admin).
+ * WHY: Customers see updates; Super Admin can search and filter by email.
+ */
 exports.listNotes = async (req, res) => {
   try {
     const role = req.user?.role;
@@ -88,7 +92,7 @@ exports.listNotes = async (req, res) => {
   }
 };
 
-/** GET /threads — super_admin: distinct customers with last message */
+/** Super Admin sidebar: one row per customer with last message preview. */
 exports.listThreads = async (req, res) => {
   try {
     if (req.user?.role !== 'super_admin') {
@@ -116,7 +120,10 @@ exports.listThreads = async (req, res) => {
   }
 };
 
-/** POST / — create note (super_admin only → one customer or broadcast to all) */
+/**
+ * Super Admin sends a note to one customer or broadcasts to every customer.
+ * HOW: broadcast=true inserts one row per customer email in customer_admin_notes.
+ */
 exports.createNote = async (req, res) => {
   try {
     const role = req.user?.role;
@@ -146,7 +153,7 @@ exports.createNote = async (req, res) => {
         .trim()
         .toLowerCase() === 'all';
 
-    // Super Admin → all customers
+    // --- Broadcast to all customer accounts ---
     if (broadcast) {
       let customers = [];
       try {
@@ -260,7 +267,7 @@ exports.createNote = async (req, res) => {
   }
 };
 
-/** DELETE /:id — super_admin only */
+/** Super Admin deletes one note message by id. */
 exports.deleteNote = async (req, res) => {
   try {
     if (req.user?.role !== 'super_admin') {

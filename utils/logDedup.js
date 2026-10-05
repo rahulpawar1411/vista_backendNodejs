@@ -6,6 +6,7 @@
  * when submission id is missing (web / older clients).
  */
 
+/** Normalizes mobile tap time to ISO string so duplicate checks match reliably. */
 function normalizeSubmittedAt(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -14,6 +15,7 @@ function normalizeSubmittedAt(value) {
   return parsed.toISOString();
 }
 
+/** Pulls client_submission_id and client_submitted_at from mixed request field names. */
 function pickSubmission(fields) {
   return {
     submissionId: String(
@@ -25,6 +27,10 @@ function pickSubmission(fields) {
   };
 }
 
+/**
+ * Returns an existing inward row if this POST is a retry (same submission id or same vehicle window).
+ * WHY: Prevents double inventory when sync runs twice on poor network.
+ */
 async function findRecentInwardDuplicate(db, fields) {
   const { submissionId, submittedAt } = pickSubmission(fields);
   if (submissionId) {
@@ -83,6 +89,7 @@ async function findRecentInwardDuplicate(db, fields) {
   return null;
 }
 
+/** Same duplicate protection as inward, for outward_temp_logs. */
 async function findRecentOutwardDuplicate(db, fields) {
   const { submissionId, submittedAt } = pickSubmission(fields);
   if (submissionId) {

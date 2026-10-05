@@ -3,6 +3,7 @@
  */
 const db = require('../config/db');
 
+/** Trims and joins allowed client/warehouse tokens from forms into one CSV string. */
 function normalizeScopeCsv(value) {
   if (value == null || value === '') return null;
   const parts = Array.isArray(value)
@@ -14,6 +15,7 @@ function normalizeScopeCsv(value) {
   return parts.length ? parts.join(',') : null;
 }
 
+/** Loads active master codes and display names for scope resolution. */
 async function loadScopeMaps() {
   const clientMaps = { byCode: new Map(), byName: new Map() };
   const warehouseMaps = { byCode: new Map(), byName: new Map() };
@@ -42,6 +44,10 @@ async function loadScopeMaps() {
   return { clientMaps, warehouseMaps };
 }
 
+/**
+ * Turns CL-/WH- codes in customer access lists into stable display names for SQL filters.
+ * WHY: Admins may save either codes or names in allowed_clients CSV.
+ */
 async function resolveScopeTokens({ clientsCsv, warehousesCsv, clientMaps, warehouseMaps }) {
   let clientsStr = normalizeScopeCsv(clientsCsv);
   let warehousesStr = normalizeScopeCsv(warehousesCsv);

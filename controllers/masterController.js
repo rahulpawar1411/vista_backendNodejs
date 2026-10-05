@@ -123,6 +123,10 @@ exports.createWarehouse = async (req, res) => {
   }
 };
 
+/**
+ * PATCH-style update for one warehouse_master row (name, city, active flag).
+ * WHY: Soft-deleted warehouses stay in DB; is_active hides them from pickers.
+ */
 exports.updateWarehouse = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -294,6 +298,9 @@ exports.createClient = async (req, res) => {
   }
 };
 
+/**
+ * Updates client_master name, warehouse link, or active flag without touching old logs.
+ */
 exports.updateClient = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

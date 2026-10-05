@@ -17,7 +17,7 @@ const { resolveWarehouseFields, resolveClientFields } = require('../utils/master
 const { findRecentOutwardDuplicate, pickSubmission } = require('../utils/logDedup');
 const { stripCustomerEditAudit } = require('../utils/stripCustomerEditAudit');
 
-// Helper to format date
+/** Formats a JS Date as MySQL-friendly YYYY-MM-DD HH:mm:ss for outward timestamps. */
 function formatDateTime(date) {
   if (!date || isNaN(date.getTime())) return '';
   const yyyy = date.getFullYear();
@@ -29,7 +29,9 @@ function formatDateTime(date) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
 }
 
-// 1. GET ALL OUTWARD LOGS (With optional search query)
+/**
+ * Lists outward loading logs with pagination and the same scope rules as inward.
+ */
 exports.getOutwardLogs = async (req, res) => {
   const { search } = req.query;
   const { page, limit, offset } = parsePagination(req.query);
@@ -104,7 +106,7 @@ exports.getOutwardLogs = async (req, res) => {
   }
 };
 
-// 2. CREATE A NEW OUTWARD LOG
+/** Creates an outward log with photos, validation, and duplicate submission checks. */
 exports.addOutwardLog = async (req, res) => {
   try {
     const data = req.body;
@@ -365,7 +367,7 @@ exports.addOutwardLog = async (req, res) => {
   }
 };
 
-// 3. DELETE AN OUTWARD LOG
+/** Removes one outward log when delete permission is granted. */
 exports.deleteOutwardLog = async (req, res) => {
   try {
     const { id } = req.params;
@@ -442,7 +444,7 @@ exports.deleteOutwardLog = async (req, res) => {
   }
 };
 
-// 4. UPDATE AN EXISTING OUTWARD LOG
+/** Updates outward fields and records what changed for Super Admin review. */
 exports.updateOutwardLog = async (req, res) => {
   try {
     const { id } = req.params;

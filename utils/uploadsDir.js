@@ -18,6 +18,7 @@ const UPLOAD_FOLDERS = [
   'daily_temp_monitor_images',
 ];
 
+/** Root folder for on-disk photos; UPLOADS_DIR env overrides default backend/uploads. */
 function getUploadsRoot() {
   const fromEnv = String(process.env.UPLOADS_DIR || '').trim();
   if (fromEnv) return path.resolve(fromEnv);
@@ -38,6 +39,10 @@ function toDbRelPath(folderName, filename) {
   return `uploads/${CRM_PREFIX}/${folderName}/${filename}`;
 }
 
+/**
+ * Creates crm/ and legacy folder trees on disk.
+ * WHY: Multer and static /uploads need writable paths before first photo upload.
+ */
 function ensureUploadFolders() {
   const tryMake = (root) => {
     fs.mkdirSync(root, { recursive: true });

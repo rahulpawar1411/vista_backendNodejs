@@ -11,6 +11,7 @@ if (process.env.RAILWAY_ENVIRONMENT || process.env.SKIP_FREE_PORT === '1') {
 
 const port = Number(process.argv[2] || process.env.PORT || 5000);
 
+/** Finds LISTENING PIDs on a port and taskkill on Windows dev machines. */
 function freePortWindows(p) {
   let out = '';
   try {

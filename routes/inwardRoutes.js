@@ -1,6 +1,11 @@
 // ====================================================================
-// DO Inward Temp Log Routes (backend/routes/inwardRoutes.js)
-// Configures Multer storage for multi-file field uploading.
+// Inward Routes — mounted at /api/inward-logs
+// --------------------------------------------------------------------
+// GET    /              — list inward unloading logs (paginated)
+// POST   /              — create log + photo uploads
+// PUT    /:id           — update log (may need permission)
+// PUT    /:id/pod-photo — replace POD photo only
+// DELETE /:id           — delete log (may need permission)
 // ====================================================================
 
 const express = require('express');

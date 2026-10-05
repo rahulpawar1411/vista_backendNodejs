@@ -9,6 +9,7 @@
 const db = require('../config/db');
 const { handleControllerError } = require('../utils/errorHandler');
 
+/** Splits comma-separated names/codes from query params or JWT scope fields. */
 function parseCsvNames(value) {
   if (value == null) return [];
   if (Array.isArray(value)) {
@@ -28,6 +29,7 @@ function matchesScopeToken(tokens, name, code) {
   return (c && tokens.includes(c)) || (n && tokens.includes(n));
 }
 
+/** Filters inventory reconciliation rows to the customer's allowed clients and warehouses. */
 function applyCustomerInventoryScope(rows, user) {
   if (!user || user.role !== 'customer') return rows;
   const clients = parseCsvNames(user.allowed_clients).map((c) => c.toLowerCase());
@@ -965,12 +967,22 @@ exports.getDailyInventoryDeltas = async (req, res) => {
 
 /**
  * GET CLIENT MONTH BOX SHEET
- * Excel-style 1-month (default last 30 days) daily rows for one client lot:
- * Date | Morning qty | Evening qty | Inward boxes | Outward boxes | Total (closing)
- * Plus warehouse, chamber, warehouse supervisor (DO full_name).
+ * Day-wise stock sheet for Super Admin Daily Box Tracker (client detail view).
+ *
+ * Data sources (only inward/outward logs for Received/Dispatch — not daily chamber task counts):
+ *   - inward_temp_logs  → boxes received per day
+ *   - outward_temp_logs → boxes dispatched per day
+ *
+ * Math shown in UI:
+ *   Start = stock at start of that day (previous day's Left)
+ *   Left  = Start + Received − Dispatch
+ *
+ * Query: client (required), warehouse, chamber, fromDate, toDate (default last 30 days).
+ * Response: { meta, days[] } with start_left, inward_boxes, outward_boxes, left_boxes per day.
  */
 exports.getClientMonthBoxSheet = async (req, res) => {
   try {
+    // --- Read and normalize query filters ---
     const clientName = String(req.query.client || req.query.client_name || '').trim();
     const warehouseName = String(req.query.warehouse || req.query.warehouse_name || '').trim();
     const chamberName = String(req.query.chamber || req.query.chamber_name || '').trim();
@@ -1001,6 +1013,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
       toDate = tmp;
     }
 
+    // Map messy shift/time strings to Morning or Evening (for chamber audit display only).
     const normalizeShift = (row) => {
       const s = String(row.shift || '').trim();
       if (/^morning$/i.test(s)) return 'Morning';
@@ -1176,7 +1189,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
       day.outward_boxes = Math.max(0, Number(row.boxes) || 0);
     });
 
-    // Opening before range = lifetime In − Out only (no daily-task / chamber counts)
+    // --- Opening stock before fromDate: sum(all inward) − sum(all outward) for this client/warehouse ---
     let openingLeft = 0;
     try {
       let openInSql = `
@@ -1221,11 +1234,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
       console.warn('Client month opening balance skipped:', openErr.message);
     }
 
-    /**
-     * In/Out records only (no daily-task morning/evening totals):
-     *   Start = previous day Left
-     *   Left  = Start + Inward − Outward
-     */
+    // --- Walk every calendar day: build running Start / Left from Received & Dispatch only ---
     let runningLeft = openingLeft;
     Object.keys(byDate)
       .sort((a, b) => a.localeCompare(b))
@@ -1249,7 +1258,7 @@ exports.getClientMonthBoxSheet = async (req, res) => {
       .sort((a, b) => a.localeCompare(b))
       .map((k) => byDate[k]);
 
-    // Only In/Out movement days — Start = previous visible Left
+    // UI lists only days with movement; re-link Start so row N Start = row N−1 Left (skips empty days).
     const activityDays = allDays.filter((d) => d.has_movement);
     const days = activityDays.length ? activityDays : allDays;
     for (let i = 0; i < days.length; i += 1) {
@@ -2165,7 +2174,8 @@ exports.getDoOperatorsList = async (req, res) => {
 
 /**
  * GET /api/dashboard/do-operator-io-counts?email=
- * Inward/outward totals + today for one Data Operator.
+ * Optional fromDate & toDate → day-wise inward/outward counts for that DO.
+ * Inward/outward totals + today always included.
  */
 exports.getDoOperatorIoCounts = async (req, res) => {
   try {
@@ -2176,6 +2186,8 @@ exports.getDoOperatorIoCounts = async (req, res) => {
     const pad = (n) => String(n).padStart(2, '0');
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const fromDate = String(req.query.fromDate || req.query.from || '').trim().slice(0, 10);
+    const toDate = String(req.query.toDate || req.query.to || '').trim().slice(0, 10);
 
     const [[inTotal]] = await db.query(
       `SELECT COUNT(*) AS c FROM inward_temp_logs
@@ -2200,6 +2212,44 @@ exports.getDoOperatorIoCounts = async (req, res) => {
       [email, todayStr]
     );
 
+    const byDate = {};
+    if (fromDate && toDate && fromDate <= toDate) {
+      const [inByDayRows] = await db.query(
+        `SELECT DATE_FORMAT(inward_entry_date, '%Y-%m-%d') AS d, COUNT(*) AS c
+         FROM inward_temp_logs
+         WHERE LOWER(TRIM(IFNULL(operator_email,''))) = ?
+           AND inward_entry_date >= ? AND inward_entry_date <= ?
+         GROUP BY DATE_FORMAT(inward_entry_date, '%Y-%m-%d')`,
+        [email, fromDate, toDate]
+      );
+      const [outByDayRows] = await db.query(
+        `SELECT DATE_FORMAT(outward_entry_date, '%Y-%m-%d') AS d, COUNT(*) AS c
+         FROM outward_temp_logs
+         WHERE LOWER(TRIM(IFNULL(operator_email,''))) = ?
+           AND outward_entry_date >= ? AND outward_entry_date <= ?
+         GROUP BY DATE_FORMAT(outward_entry_date, '%Y-%m-%d')`,
+        [email, fromDate, toDate]
+      );
+      const dayKey = (raw) => {
+        if (raw == null) return '';
+        const s = String(raw);
+        const m = s.match(/(\d{4}-\d{2}-\d{2})/);
+        return m ? m[1] : s.slice(0, 10);
+      };
+      (inByDayRows || []).forEach((row) => {
+        const d = dayKey(row.d);
+        if (!d) return;
+        if (!byDate[d]) byDate[d] = { inward: 0, outward: 0 };
+        byDate[d].inward = Number(row.c) || 0;
+      });
+      (outByDayRows || []).forEach((row) => {
+        const d = dayKey(row.d);
+        if (!d) return;
+        if (!byDate[d]) byDate[d] = { inward: 0, outward: 0 };
+        byDate[d].outward = Number(row.c) || 0;
+      });
+    }
+
     return res.status(200).json({
       success: true,
       email,
@@ -2207,7 +2257,10 @@ exports.getDoOperatorIoCounts = async (req, res) => {
       total_inward: Number(inTotal?.c) || 0,
       total_outward: Number(outTotal?.c) || 0,
       today_inward: Number(inToday?.c) || 0,
-      today_outward: Number(outToday?.c) || 0
+      today_outward: Number(outToday?.c) || 0,
+      fromDate: fromDate || null,
+      toDate: toDate || null,
+      by_date: byDate
     });
   } catch (error) {
     return handleControllerError(res, error, {

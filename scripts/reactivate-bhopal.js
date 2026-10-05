@@ -1,3 +1,8 @@
+// ====================================================================
+// One-off data fix: reactivate Bhopal warehouse rows in master tables.
+// Run manually for ops cleanup — not used by the running server.
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 

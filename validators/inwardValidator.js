@@ -34,10 +34,12 @@ const PHOTO_RULES = [
   { fileField: 'inward_count_sheet_photo', recordField: 'inward_count_sheet_photo', label: 'Count Sheet Photo', multi: true },
 ];
 
+/** True when a required form field is empty or whitespace. */
 function isBlank(v) {
   return v === null || v === undefined || String(v).trim() === '';
 }
 
+/** Converts UI date strings (ISO or DD-MM-YYYY) to YYYY-MM-DD for MySQL. */
 function normalizeEntryDate(val) {
   if (val === null || val === undefined || val === '') return null;
   if (val instanceof Date && !Number.isNaN(val.getTime())) {
@@ -248,10 +250,12 @@ function validateInwardRecord(record, options = {}) {
   return null;
 }
 
+/** Runs full inward rules on a new create payload (body + multer files). */
 function validateInwardCreate(data, files = {}) {
   return validateInwardRecord(data, { files });
 }
 
+/** Same rules as create, but on merged DB row + update body (edit flow). */
 function validateInwardUpdate(mergedRecord, files = {}) {
   return validateInwardRecord(mergedRecord, { files });
 }

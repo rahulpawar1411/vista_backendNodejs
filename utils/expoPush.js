@@ -10,11 +10,13 @@
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
 
+/** True for valid Expo push token strings stored on sub_admins / do_operators. */
 function isExpoPushToken(token) {
   const t = String(token || '').trim();
   return t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[');
 }
 
+/** Detects Expo errors that mean the device token should be cleared from DB. */
 function isDeadTokenError(detailsOrMessage) {
   const text = JSON.stringify(detailsOrMessage || '').toLowerCase();
   return text.includes('devicenotregistered') || text.includes('invalidcredentials');

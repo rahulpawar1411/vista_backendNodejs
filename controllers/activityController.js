@@ -1,3 +1,8 @@
+// ====================================================================
+// Operator activity controller (controllers/activityController.js)
+// Lists and creates rows in do_operator_activities for audit trails.
+// ====================================================================
+
 const db = require('../config/db');
 const { handleControllerError } = require('../utils/errorHandler');
 const { parsePagination, sendPaginated } = require('../utils/pagination');
@@ -157,6 +162,10 @@ exports.getActivityLogs = async (req, res) => {
   }
 };
 
+/**
+ * Records a manual or client-generated activity row (mobile DO actions, system hooks).
+ * WHY: Keeps a single audit table for Super Admin history and permission trails.
+ */
 exports.createActivityLog = async (req, res) => {
   try {
     const { action, description, remark, record_id, permission_req } = req.body;

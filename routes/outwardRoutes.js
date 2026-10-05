@@ -1,6 +1,11 @@
 // ====================================================================
-// DO Outward Temp Log Routes (backend/routes/outwardRoutes.js)
-// Configures Multer storage for multi-file field uploading.
+// Outward Routes — mounted at /api/outward-logs
+// --------------------------------------------------------------------
+// GET    /              — list outward loading logs
+// POST   /              — create log + photos
+// PUT    /:id           — update log
+// PUT    /:id/pod-photo — POD photo only
+// DELETE /:id           — delete log
 // ====================================================================
 
 const express = require('express');

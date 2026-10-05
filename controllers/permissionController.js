@@ -56,6 +56,10 @@ function buildPermissionRequestFingerprint(row) {
   return `${op}|${type}|${row.record_id}|${actionKind}`;
 }
 
+/**
+ * Keeps only the newest Pending row per fingerprint so the admin UI is not cluttered.
+ * WHY: Retries and hash drift can create duplicate REQUEST rows for the same ask.
+ */
 function dedupePendingPermissionRequests(rows) {
   const pendingByFp = new Map();
   const nonPending = [];
@@ -76,6 +80,10 @@ function dedupePendingPermissionRequests(rows) {
   );
 }
 
+/**
+ * Blocks a second identical pending request before insert.
+ * HOW: Compares semantic fingerprints, not only permission_req id.
+ */
 async function findPendingSemanticDuplicate(operatorEmail, recordType, reqActionType, description, recordId) {
   const probe = {
     operator_email: operatorEmail,
@@ -424,9 +432,12 @@ async function applyApprovedClientMasterChange(operatorEmail, requestDescription
   return { ok: false, reason: 'unparsed_request', record_id: recordId };
 }
 
-// 1. GET ALL OR USER-SPECIFIC PERMISSION REQUESTS
+/**
+ * Lists edit/delete permission requests for Super Admin or the requesting DO.
+ */
 exports.getPermissionRequests = async (req, res) => {
   try {
+    // --- Build list query (Super Admin vs own requests for DO) ---
     let rows;
     const selectCols = `
         SELECT a.id, a.operator_email, a.log_type AS record_type, a.permission_req AS record_id, a.action AS raw_action,
@@ -508,7 +519,7 @@ exports.getPermissionRequests = async (req, res) => {
   }
 };
 
-// 2. CREATE A NEW PERMISSION REQUEST (Edit or Delete)
+/** DO asks Super Admin to allow editing or deleting a specific log row. */
 exports.createPermissionRequest = async (req, res) => {
   try {
     const { record_type, record_id, action = 'Edit', description, remark } = req.body;
@@ -521,7 +532,7 @@ exports.createPermissionRequest = async (req, res) => {
     const reqActionType = action === 'Edit' ? 'REQUEST_EDIT' : 'REQUEST_DELETE';
     const grantActionType = action === 'Edit' ? 'GRANT_PERMISSION' : 'GRANT_DELETE';
 
-    // Check the latest action status for this record
+    // --- Block duplicate pending / already-granted (with master exceptions) ---
     const [existing] = await db.query(`
       SELECT action, id FROM do_operator_activities
       WHERE operator_email = ? AND log_type = ? AND permission_req = ?
@@ -571,7 +582,7 @@ exports.createPermissionRequest = async (req, res) => {
       });
     }
 
-    // Fetch target record's reference_no (skip for MasterSetup / ChamberMaster)
+    // --- Human-readable ref for activity description ---
     let refQuery = '';
     if (record_type === 'Chamber') {
       refQuery = 'SELECT reference_no FROM daily_chamber_temp_logs WHERE id = ? LIMIT 1';
@@ -607,7 +618,7 @@ exports.createPermissionRequest = async (req, res) => {
             ? 'Client master'
             : `ID: ${record_id}`);
 
-    // Insert new request as an activity log row (description + structured remark)
+    // --- Persist REQUEST row in do_operator_activities ---
     const actionLabel = action === 'Edit' ? 'edit' : 'delete';
     let descText =
       description ||
@@ -667,7 +678,7 @@ exports.createPermissionRequest = async (req, res) => {
   }
 };
 
-// 3. SUPER ADMIN: APPROVE OR DENY PERMISSION REQUEST
+/** Super Admin approves or denies a pending permission request (sends push to DO). */
 exports.updatePermissionRequestStatus = async (req, res) => {
   try {
     const { id } = req.params; // The ID of the REQUEST log entry
@@ -684,7 +695,7 @@ exports.updatePermissionRequestStatus = async (req, res) => {
       });
     }
 
-    // Fetch the request log details to identify who, what, and which ID was requested
+    // --- Load original REQUEST row ---
     const [reqRows] = await db.query(`
       SELECT operator_email, action, log_type AS record_type, permission_req AS record_id, description, remark
       FROM do_operator_activities 
@@ -710,7 +721,7 @@ exports.updatePermissionRequestStatus = async (req, res) => {
       '';
     const saRemark = saRemarkRaw != null ? String(saRemarkRaw).trim() : '';
 
-    // Determine target status action type
+    // --- Map Approved/Denied to GRANT_* or DENY_* activity action ---
     let targetAction;
     if (status === 'Approved') {
       targetAction = isEdit ? 'GRANT_PERMISSION' : 'GRANT_DELETE';
@@ -718,7 +729,7 @@ exports.updatePermissionRequestStatus = async (req, res) => {
       targetAction = isEdit ? 'DENY_PERMISSION' : 'DENY_DELETE';
     }
 
-    // Fetch target record details for a clear DO notification message
+    // --- On approve: apply side effects (chamber add, type, client master) ---
     let approvalRefNo = '';
     let chamberName = '';
     let clientName = '';
@@ -867,6 +878,7 @@ exports.updatePermissionRequestStatus = async (req, res) => {
     const approvalMessage = approvalParts.join(' · ');
     const storedRemark = saRemark || requestRemark || null;
 
+    // --- Write GRANT_* or DENY_* row + notify DO via push ---
     await logActivity(
       operator_email,
       targetAction,
@@ -915,7 +927,10 @@ exports.updatePermissionRequestStatus = async (req, res) => {
   }
 };
 
-// DO: mark notification handled (moves to Completed after Proceed / follow-up action)
+/**
+ * DO or Super Admin marks a permission notification as completed in the app.
+ * WHY: Clears the inbox and may consume one-time GRANT rows for master changes.
+ */
 exports.markPermissionActionComplete = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1129,7 +1144,7 @@ exports.getRecordPermissionHistory = async (req, res) => {
   }
 };
 
-// 4. CHECK IF PERMISSION IS GRANTED (supports both Edit and Delete actions)
+/** Returns whether the DO still has an active grant before opening an edit/delete form. */
 exports.checkPermission = async (req, res) => {
   try {
     const { record_type, record_id, action = 'Edit' } = req.query;
@@ -1150,7 +1165,7 @@ exports.checkPermission = async (req, res) => {
 
     const operator_email = req.user.email;
 
-    // 1. Check system configuration settings first
+    // --- System-wide Allow vs Require Approval ---
     const configKey = `${record_type}_${action}`;
     const [configRows] = await db.query(`
       SELECT description FROM do_operator_activities
@@ -1163,7 +1178,7 @@ exports.checkPermission = async (req, res) => {
       return res.json({ approved: true, status: 'Approved' });
     }
 
-    // 2. Check individual request log status
+    // --- Latest activity row for this record + operator ---
     const reqActionType = action === 'Edit' ? 'REQUEST_EDIT' : 'REQUEST_DELETE';
     const grantActionType = action === 'Edit' ? 'GRANT_PERMISSION' : 'GRANT_DELETE';
     const denyActionType = action === 'Edit' ? 'DENY_PERMISSION' : 'DENY_DELETE';
@@ -1274,7 +1289,7 @@ exports.hasActivePermission = async (operatorEmail, recordType, recordId, action
   return rows.length > 0 && rows[0].action === grantActionType;
 };
 
-// 5. GET SYSTEM PERMISSION CONFIG
+/** Reads global permission toggles (whether DO must request approval). */
 exports.getSystemConfig = async (req, res) => {
   try {
     const [rows] = await db.query(`
@@ -1315,7 +1330,7 @@ exports.getSystemConfig = async (req, res) => {
   }
 };
 
-// 6. UPDATE SYSTEM PERMISSION CONFIG
+/** Updates global permission policy flags (Super Admin only). */
 exports.updateSystemConfig = async (req, res) => {
   try {
     const { config_key, config_value } = req.body;

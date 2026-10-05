@@ -1,9 +1,14 @@
+// ====================================================================
+// Customer response sanitizer (utils/stripCustomerEditAudit.js)
+// ====================================================================
+
 /**
- * Hide Super Admin / edit-audit metadata from Customer app responses.
- * Operational field values (temps, counts, dates of the log itself) stay intact.
- * Super Admin / Sub-Admin / DO keep full audit fields.
+ * Customer API responses must not show Super Admin edit metadata
+ * (who updated a log, update time, internal remarks).
+ * DO / Sub-Admin / Super Admin still get full fields.
  */
 
+/** Field names we remove only for the customer role. */
 const EDIT_AUDIT_KEYS = [
   'update_details',
   'update_count',
@@ -13,6 +18,10 @@ const EDIT_AUDIT_KEYS = [
   'outward_updated_at'
 ];
 
+/**
+ * Returns true when the logged-in user is a Customer.
+ * Accepts either a user object from JWT or a plain role string.
+ */
 function isCustomerRole(userOrRole) {
   const role =
     typeof userOrRole === 'string'
@@ -21,6 +30,9 @@ function isCustomerRole(userOrRole) {
   return String(role).toLowerCase() === 'customer';
 }
 
+/**
+ * Removes audit keys from one log row (shallow copy so we do not mutate DB objects).
+ */
 function stripOne(row) {
   if (!row || typeof row !== 'object') return row;
   const out = { ...row };
@@ -32,6 +44,10 @@ function stripOne(row) {
   return out;
 }
 
+/**
+ * Main helper: strip audit fields from a list (or single object) for Customer only.
+ * Other roles get the original data unchanged.
+ */
 function stripCustomerEditAudit(items, userOrRole) {
   if (!isCustomerRole(userOrRole)) return items;
   if (!Array.isArray(items)) return stripOne(items);

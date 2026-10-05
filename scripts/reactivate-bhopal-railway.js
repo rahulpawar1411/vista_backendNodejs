@@ -1,3 +1,8 @@
+// ====================================================================
+// One-off data fix: Bhopal Railway warehouse (hosted DB).
+// Run manually when reactivating that site — not part of normal API startup.
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 

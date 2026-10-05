@@ -21,13 +21,19 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const { getJwtSecret } = require('../utils/jwtSecret');
 
-/** Pass-through for now; keep hook if legacy role remapping is needed later. */
+/**
+ * Normalizes JWT role string before DB lookup (no remapping today).
+ * WHY: Single place to fix legacy role names without changing every route.
+ */
 function normalizeRole(role) {
   // Keep sub_admin as mobile full-access role (do NOT map to customer)
   return role;
 }
 
-/** Load scoped customer fields (allowed_clients / warehouses are live from DB). */
+/**
+ * Loads customer row for scope checks.
+ * WHY: allowed_clients/warehouses must come from DB, not stale JWT claims.
+ */
 async function loadCustomerByEmail(email) {
   const [rows] = await db.query(
     'SELECT id, allowed_clients, allowed_warehouses, full_name, phone_no FROM customers WHERE email = ? LIMIT 1',
@@ -36,7 +42,7 @@ async function loadCustomerByEmail(email) {
   return rows;
 }
 
-/** Load sub-admin profile by email. */
+/** Loads mobile Sub-Admin profile fields to enrich req.user after JWT verify. */
 async function loadSubAdminByEmail(email) {
   const [rows] = await db.query(
     'SELECT id, full_name, phone_no FROM sub_admins WHERE email = ? LIMIT 1',
@@ -46,8 +52,9 @@ async function loadSubAdminByEmail(email) {
 }
 
 /**
- * Global auth gate — run before any protected handler.
- * Sets req.user = { id, email, role, ... } on success.
+ * WHAT: Validates JWT and attaches req.user for downstream handlers.
+ * WHY: Every protected API must know who is calling and that the account still exists.
+ * HOW: Bearer header first, then cookie; verify signature; re-query MySQL by role.
  */
 exports.verifyToken = async (req, res, next) => {
   try {
@@ -162,7 +169,9 @@ exports.verifyToken = async (req, res, next) => {
 };
 
 /**
- * Role gate — must run AFTER verifyToken.
+ * WHAT: Allows the request only if req.user.role is in allowedRoles.
+ * WHY: Same login token must not reach Super Admin-only routes (e.g. delete user).
+ * HOW: Returns 403 JSON when role is missing from the list; run after verifyToken.
  * @param {string[]} allowedRoles e.g. ['super_admin', 'sub_admin']
  */
 exports.requireRole = (allowedRoles = []) => {
@@ -193,4 +202,5 @@ exports.requireRole = (allowedRoles = []) => {
   };
 };
 
+/** Exported for tests or auth controller that reuses the same role normalization. */
 exports.normalizeRole = normalizeRole;

@@ -12,6 +12,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const BACKUP_DIR = path.join(__dirname, '..', 'backups');
 
+/** File-safe timestamp string for backup filenames. */
 function timestamp() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');

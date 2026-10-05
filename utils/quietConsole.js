@@ -10,6 +10,7 @@ const orig = {
 
 let quietEnabled = true;
 
+/** Hides noisy console.log in dev unless the line looks like server status or a real warning. */
 function enableQuietConsole() {
   quietEnabled = true;
 
@@ -49,6 +50,7 @@ function enableQuietConsole() {
   };
 }
 
+/** Restores normal console.log / warn behavior (useful when debugging). */
 function disableQuietConsole() {
   quietEnabled = false;
   console.log = orig.log;
@@ -56,10 +58,12 @@ function disableQuietConsole() {
   console.error = orig.error;
 }
 
+/** Prints the canonical “server listening” line used after bind. */
 function serverRunning(port) {
   orig.log(`[SERVER] listening on 0.0.0.0:${port}`);
 }
 
+/** One-line HTTP log for 4xx/5xx (or all statuses when LOG_ALL_STATUS=1). */
 function statusLine(method, url, statusCode) {
   const tag = statusCode >= 500 ? 'ERROR' : statusCode >= 400 ? 'WARN' : 'STATUS';
   const line = `[${tag}] ${statusCode} ${method} ${url}`;
@@ -67,6 +71,7 @@ function statusLine(method, url, statusCode) {
   else orig.log(line);
 }
 
+/** Always prints [ERROR] lines — never filtered by quiet mode. */
 function errorLine(message, extra) {
   if (extra !== undefined) orig.error(`[ERROR] ${message}`, extra);
   else orig.error(`[ERROR] ${message}`);

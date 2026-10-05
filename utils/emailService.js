@@ -6,6 +6,7 @@
 
 const nodemailer = require('nodemailer');
 
+/** Builds the From header from EMAIL_FROM or SMTP_USER in .env. */
 function getFromAddress() {
   return (
     process.env.EMAIL_FROM ||

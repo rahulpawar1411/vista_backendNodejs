@@ -18,7 +18,7 @@ const { resolveWarehouseFields, resolveClientFields } = require('../utils/master
 const { findRecentInwardDuplicate, pickSubmission } = require('../utils/logDedup');
 const { stripCustomerEditAudit } = require('../utils/stripCustomerEditAudit');
 
-// Helper to format date
+/** Formats a JS Date as MySQL-friendly YYYY-MM-DD HH:mm:ss for inward_created_at fields. */
 function formatDateTime(date) {
   if (!date || isNaN(date.getTime())) return '';
   const yyyy = date.getFullYear();
@@ -30,7 +30,9 @@ function formatDateTime(date) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
 }
 
-// 1. GET ALL INWARD LOGS (With optional search query)
+/**
+ * Lists inward logs with pagination, filters, and role scope (customer / DO / admin).
+ */
 exports.getInwardLogs = async (req, res) => {
   const { search } = req.query;
   const { page, limit, offset } = parsePagination(req.query);
@@ -114,7 +116,9 @@ exports.getInwardLogs = async (req, res) => {
   }
 };
 
-// 2. CREATE A NEW INWARD LOG
+/**
+ * Creates an inward unloading log with photos, validation, and duplicate protection.
+ */
 exports.addInwardLog = async (req, res) => {
   try {
     const data = req.body;
@@ -346,7 +350,7 @@ exports.addInwardLog = async (req, res) => {
   }
 };
 
-// 3. DELETE AN INWARD LOG
+/** Deletes one inward log when the user has permission (often after Super Admin approval). */
 exports.deleteInwardLog = async (req, res) => {
   try {
     const { id } = req.params;
@@ -419,7 +423,9 @@ exports.deleteInwardLog = async (req, res) => {
   }
 };
 
-// 4. UPDATE AN EXISTING INWARD LOG
+/**
+ * Updates an inward log; stores edit history in update_details for admin audit.
+ */
 exports.updateInwardLog = async (req, res) => {
   try {
     const { id } = req.params;

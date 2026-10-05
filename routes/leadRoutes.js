@@ -1,6 +1,11 @@
 // ====================================================================
-// Lead API Routes (routes/leadRoutes.js)
-// Maps HTTP endpoints to controller functions.
+// Sales leads — mounted at /api/leads
+// --------------------------------------------------------------------
+// GET    /       — all leads (?status, ?search)
+// GET    /:id    — one lead
+// POST   /       — create lead
+// PUT    /:id    — update lead
+// DELETE /:id    — delete lead
 // ====================================================================
 
 const express = require('express');

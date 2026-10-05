@@ -11,6 +11,7 @@ const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
 /** TEMP: lock/wait off unless LOGIN_LOCKOUT=true */
+/** Lockout runs only when LOGIN_LOCKOUT=true in production .env. */
 function lockoutEnabled() {
   return String(process.env.LOGIN_LOCKOUT || '').toLowerCase() === 'true';
 }
@@ -26,6 +27,7 @@ function toMysqlDateTime(date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/** Loads one login_security row for this email (failed count and lock expiry). */
 async function getRow(email) {
   const [rows] = await db.query(
     'SELECT * FROM login_security WHERE email = ? LIMIT 1',

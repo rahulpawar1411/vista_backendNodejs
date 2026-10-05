@@ -1,3 +1,9 @@
+// ====================================================================
+// Live database probe (scripts/check-live-db.js)
+// Tests connection to production/hosted MySQL using .env settings.
+// Run: node scripts/check-live-db.js
+// ====================================================================
+
 require('dotenv').config();
 const mysql = require('mysql2/promise');
 

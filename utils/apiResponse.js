@@ -11,6 +11,9 @@
  * @param {string} [message]
  * @param {number} [status]
  */
+/**
+ * Sends a standard success JSON shape so web and mobile clients parse responses the same way.
+ */
 function sendSuccess(res, data = null, message = 'OK', status = 200) {
   const body = { success: true, message };
   if (data !== null && data !== undefined) body.data = data;
@@ -22,6 +25,9 @@ function sendSuccess(res, data = null, message = 'OK', status = 200) {
  * @param {string} message
  * @param {number} [status]
  * @param {object} [extra] - checkpoint, details, etc.
+ */
+/**
+ * Sends a standard error JSON shape; optional extra fields carry checkpoint metadata for debugging.
  */
 function sendError(res, message, status = 500, extra = {}) {
   return res.status(status).json({

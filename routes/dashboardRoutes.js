@@ -1,5 +1,16 @@
 // ====================================================================
-// Dashboard API Routes (routes/dashboardRoutes.js)
+// Dashboard Routes — mounted at /api/dashboard (token + role in server.js)
+// --------------------------------------------------------------------
+// GET /stats, /                     — summary counts
+// GET /access-options               — client/warehouse lists for customer scope
+// GET /inventory-filter-options     — warehouse → client filter dropdowns
+// GET /inventory-reconciliation     — box in/out balance report
+// GET /daily-inventory-deltas       — day-by-day box changes
+// GET /client-month-box-sheet       — one client monthly export data
+// GET /do-task-overview             — DO daily task completion status
+// GET /customers                    — portal customer accounts
+// GET /do-operators                 — DO list + IO counts
+// GET /do-operators/:email/io-counts — inward/outward counts per DO
 // ====================================================================
 
 const express = require('express');

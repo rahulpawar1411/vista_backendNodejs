@@ -54,6 +54,7 @@ function parseStackFrame(err) {
   return { functionName: null, file: null, filePath: null, line: null, column: null };
 }
 
+/** Maps mysql / multer / custom errors to a short label for logs and checkpoints. */
 function classifyErrorType(err) {
   if (!err) return 'UnknownError';
   if (err.type) return err.type;
@@ -66,6 +67,7 @@ function classifyErrorType(err) {
   return 'UnhandledError';
 }
 
+/** Picks HTTP status from err.statusCode or known error codes (duplicate row → 409). */
 function resolveStatusCode(err, fallback = 500) {
   if (err && Number.isInteger(err.statusCode)) return err.statusCode;
   if (err && Number.isInteger(err.status)) return err.status;

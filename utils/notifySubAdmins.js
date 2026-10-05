@@ -1,10 +1,10 @@
-/**
- * Server-side Expo push helpers for mobile roles.
- *
- * • Sub Admin — new DO permission request (works when app is closed)
- * • DO — permission Approved / Denied (+ optional Admin remark)
- * Dead DeviceNotRegistered tokens are cleared from DB after send/receipts.
- */
+// ====================================================================
+// Mobile push notifications (utils/notifySubAdmins.js)
+// WHAT: Sends Expo push when permissions are requested or decided.
+// WHY: Sub-Admins and DOs get alerts even when the app is closed.
+// HOW: Reads expo_push_token from DB; dead tokens cleared via expoPush.js.
+// ====================================================================
+
 const db = require('../config/db');
 const {
   sendExpoPush,

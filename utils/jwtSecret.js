@@ -11,8 +11,9 @@
 // ====================================================================
 
 /**
- * Returns process.env.JWT_SECRET (trimmed).
- * Throws ConfigError (statusCode 500) if missing — callers should map that to 503.
+ * WHAT: Returns the single secret used to sign and verify login JWTs.
+ * WHY: Without a strong secret in .env, anyone could forge tokens and impersonate users.
+ * HOW: Reads JWT_SECRET; throws ConfigError if empty (auth middleware maps that to 503).
  */
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;

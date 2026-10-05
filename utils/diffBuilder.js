@@ -1,5 +1,9 @@
+// ====================================================================
+// Edit diff text for inward/outward update_details (utils/diffBuilder.js)
+// ====================================================================
+
 /**
- * Formats a value to a string representation suitable for comparison and display.
+ * Converts DB values (including Date) to comparable strings for change detection.
  */
 function valueToString(val) {
   if (val instanceof Date) {
@@ -20,12 +24,9 @@ function valueToString(val) {
 }
 
 /**
- * Builds a string summarizing the differences between two record states.
- * 
- * @param {Object} current - The original database record.
- * @param {Object} updated - The updated data to write.
- * @param {Object} fieldMapping - Mapping from column name to friendly label.
- * @returns {string} - A human-readable list of changes or empty string.
+ * WHAT: Builds "Label: old ➔ new" text for fields that actually changed.
+ * WHY: Super Admin audit trail shows what the DO edited without storing full JSON blobs.
+ * HOW: Loops fieldMapping; skips unchanged values and numeric formatting noise.
  */
 exports.buildDiffString = (current, updated, fieldMapping) => {
   const changes = [];

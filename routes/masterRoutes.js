@@ -1,7 +1,11 @@
 // ====================================================================
-// Master Data Routes — /api/masters
-// Catalog only: warehouses + clients. Roles: super_admin, sub_admin.
-// Operational chambers/assignments live under /api/chambers.
+// Master catalog — mounted at /api/masters (super_admin, sub_admin)
+// --------------------------------------------------------------------
+// GET/POST        /warehouses      — list / create warehouse_master
+// PUT/DELETE      /warehouses/:id  — update / deactivate warehouse
+// GET/POST        /clients         — list / create client_master
+// PUT/DELETE      /clients/:id     — update / deactivate client
+// (Daily DO tasks use /api/chambers assignments, not this catalog.)
 // ====================================================================
 
 const express = require('express');

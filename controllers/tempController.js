@@ -8,7 +8,8 @@ const { resolveLogAttribution } = require('../utils/logAttribution');
 const { resolveWarehouseFields, resolveClientFields } = require('../utils/masterResolver');
 
 /**
- * 1. GET ALL TEMP LOGS (With optional entry_type filter & search)
+ * Lists DO container/trailer temperature readings.
+ * WHY: Super Admin monitors cold-chain compliance; DO only sees their warehouse rows.
  */
 exports.getAllTempLogs = async (req, res) => {
   try {
@@ -60,7 +61,8 @@ exports.getAllTempLogs = async (req, res) => {
 };
 
 /**
- * 2. CREATE NEW TEMP LOG (DO Operator Submission)
+ * Saves a new daily_temp_logs row and auto-calculates Warning/Critical status from variance.
+ * HOW: Compares actual vs target temp and checks genset status from the request body.
  */
 exports.createTempLog = async (req, res) => {
   try {
@@ -81,7 +83,7 @@ exports.createTempLog = async (req, res) => {
       remarks 
     } = req.body;
 
-    // Basic Validation
+    // --- Required fields ---
     if (!entry_type || !container_number || !client_name || target_temp === undefined || actual_temp === undefined) {
       return res.status(400).json({
         success: false,
@@ -93,7 +95,7 @@ exports.createTempLog = async (req, res) => {
     const actual = parseFloat(actual_temp);
     const variance = Math.abs(actual - target);
 
-    // Alert calculation
+    // --- Status from variance (business alert rules) ---
     let status = 'Normal';
     if (genset_status === 'Faulty' || variance > 4.0) {
       status = 'Critical';
@@ -162,9 +164,7 @@ exports.createTempLog = async (req, res) => {
   }
 };
 
-/**
- * 3. DELETE TEMP LOG
- */
+/** Removes one daily temp log by id (admin cleanup or mistaken entry). */
 exports.deleteTempLog = async (req, res) => {
   try {
     const { id } = req.params;

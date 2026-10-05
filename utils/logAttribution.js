@@ -1,6 +1,11 @@
+// ====================================================================
+// Log attribution helper (utils/logAttribution.js)
+// ====================================================================
+
 /**
- * Resolve warehouse + operator for log records.
- * Prefer authenticated user (JWT) values; fall back to explicit body fields when missing.
+ * WHAT: Picks warehouse_name, warehouse_code, and operator_email for a new log row.
+ * WHY: Reports must show which DO and site created the entry, even if body omits them.
+ * HOW: JWT req.user wins; otherwise uses matching keys from the request body.
  */
 function resolveLogAttribution(req, body = {}) {
   const warehouse =

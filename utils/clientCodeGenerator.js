@@ -1,3 +1,8 @@
+// ====================================================================
+// Client master code generator (utils/clientCodeGenerator.js)
+// Builds unique CL-* codes from client and warehouse names for reports.
+// ====================================================================
+
 /** Build URL-safe uppercase slug for master codes. */
 function slugPart(value, maxLen = 14) {
   return String(value || '')

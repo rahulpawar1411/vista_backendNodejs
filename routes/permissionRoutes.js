@@ -1,7 +1,14 @@
 // ====================================================================
-// Permission Requests Routes
-// (backend/routes/permissionRoutes.js)
-// Maps permission-related actions to controllers.
+// Permission workflow — mounted at /api/permission-requests
+// --------------------------------------------------------------------
+// GET    /config              — read DO edit/delete policy toggles
+// POST   /config              — Super Admin update policy
+// GET    /check               — DO: is this record approved to edit?
+// GET    /                    — list requests (all for admin, own for DO)
+// GET    /record-history      — approval trail for one log id
+// POST   /                    — DO submits edit/delete request
+// PUT    /:id                 — Super Admin approve or deny
+// PATCH  /:id/complete        — DO marks notification handled
 // ====================================================================
 
 const express = require('express');

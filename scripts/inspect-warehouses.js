@@ -1,3 +1,9 @@
+// ====================================================================
+// Warehouse inspector (scripts/inspect-warehouses.js)
+// Prints warehouse_master and related assignment rows for debugging.
+// Run: node scripts/inspect-warehouses.js
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 

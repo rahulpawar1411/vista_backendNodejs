@@ -18,7 +18,7 @@ async function queryCustomers(sql, params = []) {
   return db.query(sql, params);
 }
 
-// 1. GET ALL CUSTOMERS
+/** Lists customer portal accounts and their allowed clients/warehouses (Super Admin). */
 exports.getSubAdmins = async (req, res) => {
   try {
     const [rows] = await queryCustomers(
@@ -49,7 +49,7 @@ exports.getSubAdmins = async (req, res) => {
   }
 };
 
-// 2. CREATE NEW CUSTOMER
+/** Creates a scoped customer login and optionally sends credentials by email. */
 exports.createSubAdmin = async (req, res) => {
   try {
     const { email, password, full_name, phone_no, allowed_clients, allowed_warehouses } = req.body;
@@ -140,7 +140,7 @@ exports.createSubAdmin = async (req, res) => {
   }
 };
 
-// 3. UPDATE CUSTOMER
+/** Updates customer profile and access scope CSV fields. */
 exports.updateSubAdmin = async (req, res) => {
   try {
     const { id } = req.params;
@@ -201,7 +201,7 @@ exports.updateSubAdmin = async (req, res) => {
   }
 };
 
-// 4. DELETE CUSTOMER
+/** Deletes a customer account from the customers table. */
 exports.deleteSubAdmin = async (req, res) => {
   try {
     const { id } = req.params;

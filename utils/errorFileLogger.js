@@ -108,6 +108,10 @@ function formatJsonLine(entry) {
  * @param {string[]} fileNames
  * @param {string} text
  */
+/**
+ * WHAT: Appends one log chunk to named files under backend/logs/.
+ * WHY: Sync write survives process crashes better than async for error paths.
+ */
 function appendToFiles(fileNames, text) {
   try {
     ensureLogsDir();

@@ -1,3 +1,8 @@
+// ====================================================================
+// File upload middleware (config/multer.js)
+// Saves photos to Cloudinary or local disk under uploads/crm/<folder>/.
+// ====================================================================
+
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -43,6 +48,10 @@ const uploadBuffer = (buffer, folder, publicId) => {
  *
  * UPLOAD_TO_CLOUDINARY=true  → Cloudinary only; DB stores https://res.cloudinary.com/...
  * UPLOAD_TO_CLOUDINARY=false → disk only under uploads/crm/<folder>/.
+ */
+/**
+ * Returns multer middleware (single / fields) for one log type folder.
+ * HOW: Reads UPLOAD_TO_CLOUDINARY — cloud uploads use memory buffer then SDK stream.
  */
 const createUploader = (folderName, filePrefix) => {
   const uploadToCloudinary = process.env.UPLOAD_TO_CLOUDINARY === 'true';

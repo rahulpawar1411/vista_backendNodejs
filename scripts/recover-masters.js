@@ -1,3 +1,9 @@
+// ====================================================================
+// Master table recovery (scripts/recover-masters.js)
+// Rebuilds missing warehouse/client master rows from log table names.
+// Run: node scripts/recover-masters.js
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 

@@ -19,6 +19,9 @@ const {
   MAX_FAILED_ATTEMPTS
 } = require('../utils/loginSecurity');
 
+/**
+ * Returns 500 for auth routes and logs a checkpoint without exposing SQL to the client.
+ */
 async function respondAuthServerError(res, error, options = {}) {
   const req = options.req || null;
   await logErrorCheckpoint(error, {

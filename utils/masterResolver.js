@@ -28,6 +28,7 @@ async function resolveWarehouseByCodeOrName({ warehouse_code, warehouse_name }) 
   return null;
 }
 
+/** Looks up client_master by CL-code or by client name plus warehouse (when names repeat). */
 async function resolveClientByCodeOrName({ client_code, client_name, warehouse_name }) {
   const code = String(client_code || '').trim();
   const name = String(client_name || '').trim();

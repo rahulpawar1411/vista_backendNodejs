@@ -1,3 +1,9 @@
+// ====================================================================
+// Schema verification (scripts/verify-schema.js)
+// Checks that required CRM tables and columns exist in MySQL.
+// Run: node scripts/verify-schema.js
+// ====================================================================
+
 require('dotenv').config();
 const mysql = require('mysql2/promise');
 

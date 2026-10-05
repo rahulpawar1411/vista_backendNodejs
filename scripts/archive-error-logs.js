@@ -9,6 +9,9 @@ const path = require('path');
 const LOGS_DIR = path.join(__dirname, '..', 'logs');
 const ARCHIVE_DIR = path.join(LOGS_DIR, 'archive');
 
+/**
+ * Moves old error.log / errors-*.log files into logs/archive/ so the active folder stays small.
+ */
 function archiveLegacyLogs() {
   if (!fs.existsSync(LOGS_DIR)) {
     console.log('No logs folder yet.');

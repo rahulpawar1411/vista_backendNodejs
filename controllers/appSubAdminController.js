@@ -10,6 +10,10 @@ const { handleControllerError } = require('../utils/errorHandler');
 
 let tableReady = false;
 
+/**
+ * Creates sub_admins table on first use if migrations have not run yet.
+ * WHY: Super Admin can add mobile Sub-Admins even on a fresh database file.
+ */
 async function ensureSubAdminsTable() {
   if (tableReady) return;
   await db.query(`
@@ -26,6 +30,10 @@ async function ensureSubAdminsTable() {
   tableReady = true;
 }
 
+/**
+ * Returns which account table already uses this email (or null if free).
+ * HOW: Checks super_admin, customers, do_operators, then sub_admins.
+ */
 async function emailTakenElsewhere(cleanEmail, excludeSubAdminId = null) {
   const [sa] = await db.query('SELECT id FROM super_admin WHERE email = ? LIMIT 1', [cleanEmail]);
   if (sa.length) return 'super_admin';
@@ -46,6 +54,10 @@ async function emailTakenElsewhere(cleanEmail, excludeSubAdminId = null) {
   return null;
 }
 
+/**
+ * Lists mobile Sub-Admins (full app access, not scoped customers).
+ * Mounted at GET /api/sub-admins for Super Admin only.
+ */
 exports.listSubAdmins = async (req, res) => {
   try {
     await ensureSubAdminsTable();
@@ -62,6 +74,7 @@ exports.listSubAdmins = async (req, res) => {
   }
 };
 
+/** Creates a sub_admins login with hashed password and audit log entry. */
 exports.createSubAdmin = async (req, res) => {
   try {
     await ensureSubAdminsTable();
@@ -112,6 +125,7 @@ exports.createSubAdmin = async (req, res) => {
   }
 };
 
+/** Updates Sub-Admin profile; re-hashes password only when a new one is sent. */
 exports.updateSubAdmin = async (req, res) => {
   try {
     await ensureSubAdminsTable();
@@ -164,6 +178,7 @@ exports.updateSubAdmin = async (req, res) => {
   }
 };
 
+/** Deletes one mobile Sub-Admin account by id. */
 exports.deleteSubAdmin = async (req, res) => {
   try {
     await ensureSubAdminsTable();

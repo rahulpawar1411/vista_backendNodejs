@@ -1,6 +1,10 @@
 // ====================================================================
-// Mobile Sub-Admin routes (full-access app accounts)
-// Mounted at /api/sub-admins — Super Admin only
+// Mobile Sub-Admins — mounted at /api/sub-admins (Super Admin only)
+// --------------------------------------------------------------------
+// GET    /       — list sub_admins table
+// POST   /       — create full-access mobile Sub-Admin
+// PUT    /:id    — update profile / password
+// DELETE /:id    — delete Sub-Admin
 // ====================================================================
 
 const express = require('express');

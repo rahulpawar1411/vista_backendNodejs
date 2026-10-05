@@ -1,3 +1,9 @@
+// ====================================================================
+// One-off DB setup script (database/update_db.js)
+// Creates inward/outward tables and seeds demo data on older installs.
+// Run: node database/update_db.js
+// ====================================================================
+
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 

@@ -47,6 +47,7 @@ function parseDecisionAudit(description, remark = null) {
   };
 }
 
+/** Adds decided_by_* and admin_remark fields onto one activity row for the admin UI. */
 function enrichActivityWithDecisionAudit(row) {
   if (!row) return row;
   const audit = parseDecisionAudit(row.description, row.remark);

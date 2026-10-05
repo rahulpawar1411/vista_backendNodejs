@@ -1,3 +1,9 @@
+// ====================================================================
+// GPS column check (scripts/check-gps-cols.js)
+// Verifies photo_capture_latitude/longitude exist on log tables.
+// Run: node scripts/check-gps-cols.js
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 

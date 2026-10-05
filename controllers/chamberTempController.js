@@ -30,7 +30,7 @@ const { stripCustomerEditAudit } = require('../utils/stripCustomerEditAudit');
 
 let memoryChamberLogs = [];
 
-// Helper to format Date into standard YYYY-MM-DD HH:mm:ss string
+/** Formats capture/inspection times as YYYY-MM-DD HH:mm:ss for chamber temp logs. */
 function formatDateTime(date) {
   if (!date || isNaN(date.getTime())) return null;
   const yyyy = date.getFullYear();

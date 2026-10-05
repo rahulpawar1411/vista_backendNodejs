@@ -13,6 +13,10 @@ const app = express();
 const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME);
 const PORT = Number(process.env.PORT) || 5000;
 
+/**
+ * Builds the JSON body for /health and /api/health.
+ * Hosting (e.g. Railway) pings these URLs to know the API is alive without loading the full app stack.
+ */
 function sendLiveHealth(res) {
   return res.status(200).json({
     success: true,
@@ -284,7 +288,8 @@ app.use(express.static(path.join(__dirname, '../frontend/dist')));
 app.get('/api/debug-sync', async (req, res) => {
   const diagnostics = {};
   const dbPool = require('./config/db');
-  
+
+  // --- Test database ---
   // 1. Test Database Connectivity
   try {
     await dbPool.query('SELECT 1');

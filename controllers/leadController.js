@@ -6,8 +6,8 @@
 const db = require('../config/db');
 
 /**
- * 1. GET ALL LEADS
- * Supports optional search query (?search=rahul) and status filter (?status=New)
+ * Lists sales leads for the CRM pipeline (newest first).
+ * HOW: Optional ?status= and ?search= narrow the MySQL query.
  */
 exports.getAllLeads = async (req, res) => {
   try {
@@ -48,9 +48,7 @@ exports.getAllLeads = async (req, res) => {
   }
 };
 
-/**
- * 2. GET SINGLE LEAD BY ID
- */
+/** Returns one lead row for detail screens. */
 exports.getLeadById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -77,9 +75,7 @@ exports.getLeadById = async (req, res) => {
   }
 };
 
-/**
- * 3. CREATE NEW LEAD
- */
+/** Adds a prospect to the leads table (name + phone required). */
 exports.createLead = async (req, res) => {
   try {
     const { name, company, phone, email, status, source, value, notes } = req.body;
@@ -125,9 +121,7 @@ exports.createLead = async (req, res) => {
   }
 };
 
-/**
- * 4. UPDATE EXISTING LEAD
- */
+/** Updates lead status, value, or contact info after follow-up calls. */
 exports.updateLead = async (req, res) => {
   try {
     const { id } = req.params;
@@ -174,9 +168,7 @@ exports.updateLead = async (req, res) => {
   }
 };
 
-/**
- * 5. DELETE LEAD
- */
+/** Permanently deletes a lead record by id. */
 exports.deleteLead = async (req, res) => {
   try {
     const { id } = req.params;

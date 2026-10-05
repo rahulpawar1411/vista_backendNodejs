@@ -1,3 +1,8 @@
+// ====================================================================
+// Activity audit logger (utils/logger.js)
+// Writes human-readable rows to do_operator_activities for admin history.
+// ====================================================================
+
 const db = require('../config/db');
 
 /**
@@ -48,6 +53,10 @@ exports.getActorLabel = async (user) => {
   return name ? `${name} (${user.email})` : user.email;
 };
 
+/**
+ * Inserts one activity row (login, edit, permission, system events).
+ * HOW: Best-effort — failures are logged but do not block the main API response.
+ */
 exports.logActivity = async (email, action, logType, description, permissionReqId = null, remark = null) => {
   try {
     await db.query(

@@ -1,3 +1,9 @@
+// ====================================================================
+// Quick DB sanity check (scripts/check-db.js)
+// Connects with .env credentials and prints table list + row counts.
+// Run: node scripts/check-db.js
+// ====================================================================
+
 require('dotenv').config();
 const mysql = require('mysql2/promise');
 

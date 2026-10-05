@@ -10,6 +10,10 @@ const { handleControllerError } = require('../utils/errorHandler');
 
 const ALLOWED_STATUSES = ['Open', 'In Progress', 'Resolved', 'Closed'];
 
+/**
+ * Loads customer profile from customers table (legacy fallback: sub_admins).
+ * WHY: Report rows store a snapshot but UI shows live name/phone when possible.
+ */
 async function loadCustomerIdentity(email) {
   const clean = String(email || '').trim().toLowerCase();
   if (!clean) return null;
@@ -33,7 +37,10 @@ async function loadCustomerIdentity(email) {
   }
 }
 
-/** POST / — Customer creates a report */
+/**
+ * Customer submits an issue or question tied to a log reference number.
+ * WHY: Gives Super Admin a ticket queue without exposing internal edit fields.
+ */
 exports.createCustomerReport = async (req, res) => {
   try {
     const role = req.user?.role;
@@ -96,7 +103,7 @@ exports.createCustomerReport = async (req, res) => {
   }
 };
 
-/** GET / — Super Admin lists all customer reports */
+/** Super Admin inbox: filter by status/search and merge live customer profile fields. */
 exports.getCustomerReports = async (req, res) => {
   try {
     if (req.user?.role !== 'super_admin') {
@@ -194,7 +201,10 @@ exports.getCustomerReports = async (req, res) => {
   }
 };
 
-/** PATCH /:id/status — Super Admin updates report status */
+/**
+ * Super Admin moves a report through Open → In Progress → Resolved/Closed.
+ * WHY: Tracks who reviewed the ticket and when it was resolved.
+ */
 exports.updateCustomerReportStatus = async (req, res) => {
   try {
     if (req.user?.role !== 'super_admin') {
@@ -238,7 +248,7 @@ exports.updateCustomerReportStatus = async (req, res) => {
   }
 };
 
-/** DELETE /:id — Super Admin deletes a customer report */
+/** Super Admin removes a report row (spam or duplicate cleanup). */
 exports.deleteCustomerReport = async (req, res) => {
   try {
     if (req.user?.role !== 'super_admin') {

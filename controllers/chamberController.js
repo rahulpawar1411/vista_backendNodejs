@@ -103,7 +103,7 @@ function chamberAddPermissionId(name) {
 }
 exports.chamberAddPermissionId = chamberAddPermissionId;
 
-// Helper to format Date into standard YYYY-MM-DD HH:mm:ss string
+/** Formats inspection timestamps for chamber daily task records. */
 function formatDateTime(date) {
   if (!date || isNaN(date.getTime())) return null;
   const yyyy = date.getFullYear();
@@ -177,7 +177,7 @@ function calculateVariance(entryDateStr, inspectionTimeStr, captureDate) {
  * ====================================================================
  */
 
-// 1. Fetch all chambers
+/** Returns chambers visible to the user (DO sees only their warehouse chambers). */
 exports.getChambers = async (req, res) => {
   try {
     // DO: return only chambers assigned to THIS DO's warehouse (not global Chamber 1..N).
@@ -462,7 +462,7 @@ exports.getAssignments = async (req, res) => {
   }
 };
 
-// 3. Log a daily chamber client box temperature inspection (DO Operator Submission)
+/** DO submits daily box temperature + sensor photo for one client in a chamber. */
 exports.addInspection = async (req, res) => {
   try {
     const { operator_name, chamber_id, client_name, entry_date, entry_time, box_temp, box_count, chamber_type, overdue_time, photo_capture_time: bodyCaptureTime, created_at } = req.body;
@@ -642,7 +642,7 @@ exports.addInspection = async (req, res) => {
   }
 };
 
-// 4. Fetch all daily inspections (for Super Admin watch & operate)
+/** Lists daily inspection rows for admin monitoring dashboards. */
 exports.getInspections = async (req, res) => {
   try {
     const [rows] = await db.query(`
@@ -687,7 +687,7 @@ exports.getInspections = async (req, res) => {
   }
 };
 
-// 5. Delete daily inspection
+/** Deletes one daily inspection record by id. */
 exports.deleteInspection = async (req, res) => {
   try {
     const { id } = req.params;
@@ -729,7 +729,7 @@ exports.deleteInspection = async (req, res) => {
   }
 };
 
-// 5. Add a new chamber-client assignment locally synced from DO Operator
+/** Links a client to a chamber (master setup / DO sync). */
 exports.addAssignment = async (req, res) => {
   try {
     const {
@@ -905,7 +905,7 @@ exports.addAssignment = async (req, res) => {
   }
 };
 
-// 6. Delete/remove a chamber-client assignment locally synced from DO Operator
+/** Removes a client from a chamber assignment list. */
 exports.deleteAssignment = async (req, res) => {
   try {
     const chamber_id = (req.body && req.body.chamber_id) || (req.query && req.query.chamber_id);
@@ -1028,7 +1028,7 @@ exports.deleteAssignment = async (req, res) => {
   }
 };
 
-// 7. Create a chamber (DO within chamber_limit, or Super Admin)
+/** Adds a new chamber row when within the DO chamber_limit or for Super Admin. */
 exports.createChamber = async (req, res) => {
   try {
     let { name, remark, chamber_type } = req.body;
@@ -1321,7 +1321,7 @@ exports.createChamber = async (req, res) => {
   }
 };
 
-// 8. Update chamber name
+/** Renames or reconfigures an existing chamber. */
 exports.updateChamber = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -1454,7 +1454,7 @@ exports.updateChamber = async (req, res) => {
   }
 };
 
-// 9. Delete a chamber (and soft-deactivate its assignments)
+/** Deletes a chamber and cleans up related assignments. */
 exports.deleteChamber = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

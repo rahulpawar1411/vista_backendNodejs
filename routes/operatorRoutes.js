@@ -1,6 +1,10 @@
 // ====================================================================
-// Data Operator Routes (backend/routes/operatorRoutes.js)
-// Defines API endpoints for Super Admin to CRUD Data Operator accounts.
+// DO operators — mounted at /api/do-operators (Super Admin / Sub-Admin)
+// --------------------------------------------------------------------
+// GET    /       — list DO accounts + warehouse/chamber_limit
+// POST   /       — create DO login
+// PUT    /:id    — update DO profile or warehouse
+// DELETE /:id    — delete DO account
 // ====================================================================
 
 const express = require('express');

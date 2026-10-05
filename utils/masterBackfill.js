@@ -121,6 +121,7 @@ function nextClientCode(clientName, slugCounts, usedCodes) {
   return code;
 }
 
+/** Inserts warehouse_master rows for every distinct warehouse_name seen in live logs. */
 async function backfillWarehouses(pool) {
   const names = await collectDistinctWarehouseNames(pool);
   let existing = [];
@@ -152,6 +153,7 @@ async function backfillWarehouses(pool) {
   return { inserted, total: names.length };
 }
 
+/** Inserts client_master rows for each warehouse + client pair found in assignments and logs. */
 async function backfillClients(pool) {
   const pairs = await collectDistinctClientPairs(pool);
   let existing = [];

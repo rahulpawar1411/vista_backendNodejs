@@ -1,5 +1,10 @@
+// ====================================================================
+// Pagination + SQL scope helpers (utils/pagination.js)
+// Keeps list APIs fast and filters rows by customer / DO / warehouse rules.
+// ====================================================================
+
 /**
- * Shared list pagination for large log tables.
+ * Reads page and limit from query string; caps size so exports cannot overload the DB.
  */
 function parsePagination(query, options = {}) {
   const defaultLimit = options.defaultLimit ?? 50;
@@ -15,6 +20,7 @@ function parsePagination(query, options = {}) {
   return { page, limit, offset, isExport };
 }
 
+/** Wraps list results with total count and hasMore for infinite-scroll UIs. */
 function sendPaginated(res, items, total, page, limit) {
   const totalNum = Number(total) || 0;
   return res.json({
@@ -26,6 +32,7 @@ function sendPaginated(res, items, total, page, limit) {
   });
 }
 
+/** Splits comma-separated filter tokens from query params or JWT allowed_clients fields. */
 function parseCsvNames(value) {
   if (value == null) return [];
   if (Array.isArray(value)) {

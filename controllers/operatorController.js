@@ -53,7 +53,7 @@ async function syncOperatorWarehouseOnPastLogs(operatorEmail, warehouseName, war
   return { updated };
 }
 
-// 1. GET ALL OPERATORS
+/** Lists DO operators with warehouse and chamber limit (Super Admin / Sub-Admin). */
 exports.getOperators = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -141,7 +141,7 @@ exports.getOperators = async (req, res) => {
   }
 };
 
-// 2. CREATE NEW OPERATOR
+/** Creates a DO operator account tied to one warehouse. */
 exports.createOperator = async (req, res) => {
   try {
     const { email, password, full_name, phone_no, warehouse_name, warehouse_code, chamber_limit } = req.body;
@@ -225,7 +225,7 @@ exports.createOperator = async (req, res) => {
   }
 };
 
-// 3. UPDATE OPERATOR
+/** Updates operator profile, warehouse assignment, or chamber limit. */
 exports.updateOperator = async (req, res) => {
   try {
     const { id } = req.params;
@@ -335,7 +335,7 @@ exports.updateOperator = async (req, res) => {
   }
 };
 
-// 4. DELETE OPERATOR
+/** Removes a DO operator account. */
 exports.deleteOperator = async (req, res) => {
   try {
     const { id } = req.params;

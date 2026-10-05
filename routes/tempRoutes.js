@@ -1,6 +1,9 @@
 // ====================================================================
-// Temperature Monitoring Routes (routes/tempRoutes.js)
-// Endpoints for Data Operator daily Inward/Outward temp logs.
+// Container temp logs — mounted at /api/temp-logs
+// --------------------------------------------------------------------
+// GET    /     — list daily_temp_logs (?entry_type, ?search)
+// POST   /     — DO submits container/trailer reading
+// DELETE /:id  — remove one log
 // ====================================================================
 
 const express = require('express');

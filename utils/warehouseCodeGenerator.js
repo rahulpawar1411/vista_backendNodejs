@@ -1,3 +1,8 @@
+// ====================================================================
+// Warehouse master code generator (utils/warehouseCodeGenerator.js)
+// Assigns WH-CITY-01 style codes when Super Admin adds warehouses.
+// ====================================================================
+
 /** Build uppercase slug for warehouse codes (letters/digits/hyphen). */
 function slugPart(value, maxLen = 12) {
   return String(value || '')

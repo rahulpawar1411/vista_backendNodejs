@@ -1,3 +1,9 @@
+// ====================================================================
+// Local WAMP/MySQL check (scripts/check-local-db.js)
+// Connects to localhost DB from .env and prints basic stats.
+// Run: node scripts/check-local-db.js
+// ====================================================================
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mysql = require('mysql2/promise');
 
