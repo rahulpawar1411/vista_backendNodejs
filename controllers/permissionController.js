@@ -335,16 +335,18 @@ async function applyApprovedClientMasterChange(operatorEmail, requestDescription
       String(chamberType || '').trim() ||
       'Frozen';
 
+    // Assigned date = created_at (day client was added); keep original on re-activate
     await db.query(
       `INSERT INTO chamber_client_assignments
-       (chamber_id, client_name, client_code, warehouse_name, warehouse_code, remark, chamber_type, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+       (chamber_id, client_name, client_code, warehouse_name, warehouse_code, remark, chamber_type, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, NULL)
        ON DUPLICATE KEY UPDATE
          client_code = VALUES(client_code),
          warehouse_code = VALUES(warehouse_code),
          remark = VALUES(remark),
          chamber_type = VALUES(chamber_type),
-         status = 'active'`,
+         status = 'active',
+         updated_at = NULL`,
       [chamberId, finalClientName, finalClientCode, warehouse_name, warehouse_code, remark, resolvedType]
     );
 
@@ -361,9 +363,28 @@ async function applyApprovedClientMasterChange(operatorEmail, requestDescription
   if (isDelete && delMatch) {
     const [, clientName, chamberName, chamberIdRaw] = delMatch;
     const chamberId = parseInt(chamberIdRaw, 10);
+    // Disable date = day DO sent REQUEST_DELETE (SA approval completes that request)
+    let disableAt = null;
+    try {
+      const [reqRows] = await db.query(
+        `SELECT created_at
+         FROM do_operator_activities
+         WHERE operator_email = ?
+           AND log_type = 'ClientMaster'
+           AND permission_req = ?
+           AND action = 'REQUEST_DELETE'
+         ORDER BY id DESC
+         LIMIT 1`,
+        [operatorEmail, recordId]
+      );
+      disableAt = reqRows[0]?.created_at || null;
+    } catch (_) {
+      disableAt = null;
+    }
     await db.query(
       `UPDATE chamber_client_assignments
-       SET status = 'inactive', remark = ?
+       SET status = 'inactive', remark = ?,
+           updated_at = COALESCE(?, CURRENT_TIMESTAMP)
        WHERE chamber_id = ?
          AND LOWER(TRIM(client_name)) = LOWER(TRIM(?))
          AND (
@@ -373,6 +394,7 @@ async function applyApprovedClientMasterChange(operatorEmail, requestDescription
          )`,
       [
         remark || '',
+        disableAt,
         chamberId,
         clientName,
         warehouse_code || null, warehouse_code || '', warehouse_code || null,
@@ -384,7 +406,8 @@ async function applyApprovedClientMasterChange(operatorEmail, requestDescription
       action: 'delete',
       chamber_id: chamberId,
       chamber_name: chamberName,
-      client_name: clientName
+      client_name: clientName,
+      disabled_at: disableAt
     };
   }
 

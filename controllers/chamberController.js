@@ -354,7 +354,11 @@ exports.getAssignments = async (req, res) => {
       ? `
       SELECT cca.chamber_id, c.name AS chamber_name, cca.client_name, cca.client_code, cca.warehouse_name, cca.warehouse_code,
              COALESCE(NULLIF(TRIM(c.chamber_type), ''), NULLIF(TRIM(cca.chamber_type), ''), 'Frozen') AS chamber_type,
-             COALESCE(NULLIF(TRIM(cca.status), ''), 'active') AS status
+             COALESCE(NULLIF(TRIM(cca.status), ''), 'active') AS status,
+             cca.created_at,
+             cca.created_at AS assigned_at,
+             cca.updated_at,
+             cca.updated_at AS disabled_at
       FROM chamber_client_assignments cca
       JOIN chambers c ON cca.chamber_id = c.id
       WHERE 1=1
@@ -366,7 +370,11 @@ exports.getAssignments = async (req, res) => {
       : `
       SELECT cca.chamber_id, c.name AS chamber_name, cca.client_name, cca.client_code, cca.warehouse_name, cca.warehouse_code,
              COALESCE(NULLIF(TRIM(c.chamber_type), ''), NULLIF(TRIM(cca.chamber_type), ''), 'Frozen') AS chamber_type,
-             COALESCE(NULLIF(TRIM(cca.status), ''), 'active') AS status
+             COALESCE(NULLIF(TRIM(cca.status), ''), 'active') AS status,
+             cca.created_at,
+             cca.created_at AS assigned_at,
+             cca.updated_at,
+             cca.updated_at AS disabled_at
       FROM chamber_client_assignments cca
       JOIN chambers c ON cca.chamber_id = c.id
       WHERE (
@@ -836,17 +844,18 @@ exports.addAssignment = async (req, res) => {
       }
     }
 
-    // Insert or update to active status
+    // Insert or update to active status (created_at = assigned date; updated_at on change)
     await db.query(
       `INSERT INTO chamber_client_assignments
-       (chamber_id, client_name, client_code, warehouse_name, warehouse_code, remark, chamber_type, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+       (chamber_id, client_name, client_code, warehouse_name, warehouse_code, remark, chamber_type, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, NULL)
        ON DUPLICATE KEY UPDATE
          client_code = VALUES(client_code),
          warehouse_code = VALUES(warehouse_code),
          remark = VALUES(remark),
          chamber_type = VALUES(chamber_type),
-         status = 'active'`,
+         status = 'active',
+         updated_at = CURRENT_TIMESTAMP`,
       [resolvedChamberId, finalClientName, finalClientCode, warehouse_name, warehouse_code, remark || null, resolvedType]
     );
 
@@ -953,10 +962,36 @@ exports.deleteAssignment = async (req, res) => {
       warehouse_name = resolvedWarehouse.warehouse_name;
     }
 
-    // Soft delete mapping in MySQL
+    // Soft delete: Assigned = created_at; Disabled = DO REQUEST_DELETE day (keep if already set)
+    let disableAt = null;
+    if (req.user?.role === 'do_operator' && req.user?.email) {
+      try {
+        const { clientMasterPermissionId } = require('./permissionController');
+        const permId = clientMasterPermissionId(
+          resolvedChamberId,
+          'delete',
+          client_name || client_code || ''
+        );
+        const [reqRows] = await db.query(
+          `SELECT created_at
+           FROM do_operator_activities
+           WHERE operator_email = ?
+             AND log_type = 'ClientMaster'
+             AND permission_req = ?
+             AND action = 'REQUEST_DELETE'
+           ORDER BY id DESC
+           LIMIT 1`,
+          [req.user.email, permId]
+        );
+        disableAt = reqRows[0]?.created_at || null;
+      } catch (_) {
+        disableAt = null;
+      }
+    }
     await db.query(
       `UPDATE chamber_client_assignments
-       SET status = 'inactive', remark = ?
+       SET status = 'inactive', remark = ?,
+           updated_at = COALESCE(updated_at, ?, CURRENT_TIMESTAMP)
        WHERE chamber_id = ?
          AND (
            (? IS NOT NULL AND TRIM(?) <> '' AND client_code = ?)
@@ -970,6 +1005,7 @@ exports.deleteAssignment = async (req, res) => {
          )`,
       [
         remark || '',
+        disableAt,
         resolvedChamberId,
         client_code || null, client_code || '', client_code || null,
         client_code || null, client_code || '', client_name || '',
@@ -1481,7 +1517,7 @@ exports.deleteChamber = async (req, res) => {
     const chamberName = rows[0].name;
 
     await db.query(
-      "UPDATE chamber_client_assignments SET status = 'inactive' WHERE chamber_id = ?",
+      "UPDATE chamber_client_assignments SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE chamber_id = ?",
       [id]
     );
     try {
